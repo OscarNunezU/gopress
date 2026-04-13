@@ -33,10 +33,17 @@ type PDFOptions struct {
 
 // Pool manages a fixed set of Chromium instances and queues conversion jobs.
 type Pool struct {
-	instances []*Instance
-	queue     chan *pendingJob
-	mu        sync.Mutex
-	logger    *slog.Logger
+	cfg    PoolConfig
+	slots  []*slot
+	queue  chan *pendingJob
+	mu     sync.Mutex
+	logger *slog.Logger
+}
+
+// slot tracks one instance position in the pool (index + current instance).
+type slot struct {
+	index int
+	inst  *Instance
 }
 
 type pendingJob struct {
@@ -60,6 +67,7 @@ type PoolConfig struct {
 // NewPool creates and starts a pool of Chromium instances.
 func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, error) {
 	p := &Pool{
+		cfg:    cfg,
 		queue:  make(chan *pendingJob, cfg.Size*4),
 		logger: logger,
 	}
@@ -70,8 +78,9 @@ func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, e
 			p.Close()
 			return nil, fmt.Errorf("init pool instance %d: %w", i, err)
 		}
-		p.instances = append(p.instances, inst)
-		go p.worker(inst)
+		s := &slot{index: i, inst: inst}
+		p.slots = append(p.slots, s)
+		go p.worker(s)
 	}
 
 	return p, nil
@@ -99,21 +108,46 @@ func (p *Pool) Close() {
 	close(p.queue)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for _, inst := range p.instances {
-		if err := inst.Close(); err != nil {
+	for _, s := range p.slots {
+		if err := s.inst.Close(); err != nil {
 			p.logger.Error("close instance", "err", err)
 		}
 	}
 }
 
-func (p *Pool) worker(inst *Instance) {
+func (p *Pool) worker(s *slot) {
 	for pj := range p.queue {
-		pdf, err := inst.Convert(context.Background(), pj.job)
+		pdf, err := s.inst.Convert(context.Background(), pj.job)
 		pj.result <- jobResult{pdf: pdf, err: err}
 
-		if inst.NeedsRestart() {
-			// TODO: restart instance and replace in pool
-			p.logger.Info("instance restart needed", "port", inst.process.Port())
+		if s.inst.NeedsRestart() {
+			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index)
+			if err := p.restart(s); err != nil {
+				p.logger.Error("instance restart failed", "err", err, "port", p.cfg.BasePort+s.index)
+			}
 		}
 	}
+}
+
+// restart kills the current instance and starts a fresh one in the same slot.
+func (p *Pool) restart(s *slot) error {
+	if err := s.inst.Close(); err != nil {
+		p.logger.Warn("kill old instance during restart", "err", err)
+	}
+
+	inst, err := NewInstance(
+		context.Background(),
+		p.cfg.BinPath,
+		p.cfg.BasePort+s.index,
+		p.cfg.MaxConversions,
+		p.logger,
+	)
+	if err != nil {
+		return fmt.Errorf("restart instance at port %d: %w", p.cfg.BasePort+s.index, err)
+	}
+
+	p.mu.Lock()
+	s.inst = inst
+	p.mu.Unlock()
+	return nil
 }

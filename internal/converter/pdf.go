@@ -4,8 +4,10 @@ package converter
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/OscarNunezU/gopress/internal/browser"
+	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
 
 // Converter converts HTML documents to PDF using a browser pool.
@@ -24,6 +26,7 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 		return nil, fmt.Errorf("html content is required")
 	}
 
+	start := time.Now()
 	job := &browser.Job{
 		HTML:    html,
 		Assets:  assets,
@@ -31,6 +34,16 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 	}
 
 	pdf, err := c.pool.Convert(ctx, job)
+	duration := time.Since(start).Seconds()
+
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+
+	telemetry.ConversionsTotal.WithLabelValues(status).Inc()
+	telemetry.ConversionDuration.WithLabelValues(status).Observe(duration)
+
 	if err != nil {
 		return nil, fmt.Errorf("convert html to pdf: %w", err)
 	}

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -63,22 +62,33 @@ func (i *Instance) Convert(ctx context.Context, job *Job) ([]byte, error) {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("enable Page domain: %w", err)
 	}
+	if err := cdp.EnableLifecycleEvents(ctx, client); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("enable lifecycle events: %w", err)
+	}
 	if err := cdp.EnableNetwork(ctx, client); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("enable Network domain: %w", err)
 	}
 
 	// --- load HTML ---
+	// IMPORTANT: subscribe to page events BEFORE triggering any navigation or
+	// content injection to eliminate the race where the event fires before we
+	// start listening, which would cause the conversion to hang until timeout.
 	loadCtx, loadSpan := telemetry.Tracer().Start(ctx, "browser.load_html")
 	loadSpan.SetAttributes(attribute.Bool("has_assets", len(job.Assets) > 0))
+
 	var loadErr error
 	if len(job.Assets) > 0 {
 		loadErr = i.convertWithAssets(loadCtx, client, job)
 	} else {
+		// Subscribe before injecting content.
+		loadCh := client.Subscribe("Page.loadEventFired")
 		if loadErr = cdp.SetDocumentContent(loadCtx, client, job.HTML); loadErr == nil {
-			loadErr = waitForLoad(loadCtx, client)
+			loadErr = waitForEvent(loadCtx, loadCh)
 		}
 	}
+
 	if loadErr != nil {
 		loadSpan.SetStatus(codes.Error, loadErr.Error())
 		loadSpan.RecordError(loadErr)
@@ -91,17 +101,21 @@ func (i *Instance) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	// --- print to PDF ---
 	pdfCtx, pdfSpan := telemetry.Tracer().Start(ctx, "browser.print_pdf")
 	params := cdp.PrintToPDFParams{
-		Landscape:         job.Options.Landscape,
-		PrintBackground:   job.Options.PrintBackground,
-		Scale:             job.Options.Scale,
-		PaperWidth:        job.Options.PaperWidth,
-		PaperHeight:       job.Options.PaperHeight,
-		MarginTop:         job.Options.MarginTop,
-		MarginBottom:      job.Options.MarginBottom,
-		MarginLeft:        job.Options.MarginLeft,
-		MarginRight:       job.Options.MarginRight,
-		PreferCSSPageSize: job.Options.PreferCSSPageSize,
-		TransferMode:      "ReturnAsBase64",
+		Landscape:           job.Options.Landscape,
+		PrintBackground:     job.Options.PrintBackground,
+		Scale:               job.Options.Scale,
+		PaperWidth:          job.Options.PaperWidth,
+		PaperHeight:         job.Options.PaperHeight,
+		MarginTop:           job.Options.MarginTop,
+		MarginBottom:        job.Options.MarginBottom,
+		MarginLeft:          job.Options.MarginLeft,
+		MarginRight:         job.Options.MarginRight,
+		PreferCSSPageSize:   job.Options.PreferCSSPageSize,
+		DisplayHeaderFooter: job.Options.DisplayHeaderFooter,
+		HeaderTemplate:      job.Options.HeaderTemplate,
+		FooterTemplate:      job.Options.FooterTemplate,
+		PageRanges:          job.Options.PageRanges,
+		TransferMode:        "ReturnAsBase64",
 	}
 	result, err := cdp.PrintToPDF(pdfCtx, client, params)
 	pdfSpan.End()
@@ -133,11 +147,9 @@ func (i *Instance) Close() error {
 }
 
 // dialCDP connects a CDP client to a new tab on this instance.
-// Returns the client, the target ID (for closing the tab later), and any error.
 func (i *Instance) dialCDP(ctx context.Context) (*cdp.Client, string, error) {
 	host := fmt.Sprintf("localhost:%d", i.process.Port())
 
-	// Open a new target (tab) and get its WebSocket URL.
 	wsURL, targetID, err := newTarget(host)
 	if err != nil {
 		return nil, "", fmt.Errorf("new cdp target: %w", err)
@@ -151,17 +163,18 @@ func (i *Instance) dialCDP(ctx context.Context) (*cdp.Client, string, error) {
 	return client, targetID, nil
 }
 
-// convertWithAssets starts a temporary HTTP server to serve assets, navigates
-// Chromium to it, and waits for the page to fully load.
+// convertWithAssets starts a temporary HTTP server to serve assets, subscribes
+// to lifecycle events, navigates Chromium, then waits for network idle.
+//
+// Subscribing BEFORE Navigate is mandatory: if the page loads before Subscribe
+// is called, the networkIdle event is never received and the conversion hangs.
 func (i *Instance) convertWithAssets(ctx context.Context, client *cdp.Client, job *Job) error {
-	// Build an in-memory file map: inject index.html + all assets.
 	files := make(map[string][]byte, len(job.Assets)+1)
 	files["index.html"] = []byte(job.HTML)
 	for name, data := range job.Assets {
 		files[name] = data
 	}
 
-	// Pick a free local port for the asset server.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("asset server listen: %w", err)
@@ -170,7 +183,7 @@ func (i *Instance) convertWithAssets(ctx context.Context, client *cdp.Client, jo
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		name := r.URL.Path[1:] // strip leading "/"
+		name := r.URL.Path[1:]
 		if name == "" {
 			name = "index.html"
 		}
@@ -186,26 +199,41 @@ func (i *Instance) convertWithAssets(ctx context.Context, client *cdp.Client, jo
 	go srv.Serve(ln) //nolint:errcheck
 	defer srv.Close()
 
+	// Subscribe BEFORE triggering navigation — avoids the race condition.
+	lifecycleCh := client.Subscribe("Page.lifecycleEvent")
+
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	if err := cdp.Navigate(ctx, client, url); err != nil {
 		return fmt.Errorf("navigate to asset server: %w", err)
 	}
-	return waitForLoad(ctx, client)
+
+	return waitForNetworkIdle(ctx, lifecycleCh)
 }
 
-// waitForLoad blocks until Page.loadEventFired or context cancellation.
-func waitForLoad(ctx context.Context, client *cdp.Client) error {
-	ch := client.Subscribe("Page.loadEventFired")
+// waitForEvent blocks until one event arrives on ch or the context is cancelled.
+// Used for Page.loadEventFired where the page has no external resources.
+func waitForEvent(ctx context.Context, ch <-chan cdp.Event) error {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("wait for page load: %w", ctx.Err())
 	case <-ch:
-		// Small settle delay to let late-loading resources finish.
+		return nil
+	}
+}
+
+// waitForNetworkIdle blocks until Page.lifecycleEvent fires with name="networkIdle"
+// or the context is cancelled. Using networkIdle instead of a fixed settle delay
+// ensures all sub-resources (fonts, images, CSS) are fully loaded before printing.
+func waitForNetworkIdle(ctx context.Context, ch <-chan cdp.Event) error {
+	for {
 		select {
 		case <-ctx.Done():
-		case <-time.After(50 * time.Millisecond):
+			return fmt.Errorf("wait for network idle: %w", ctx.Err())
+		case evt := <-ch:
+			if name, _ := evt.Params["name"].(string); name == "networkIdle" {
+				return nil
+			}
 		}
-		return nil
 	}
 }
 

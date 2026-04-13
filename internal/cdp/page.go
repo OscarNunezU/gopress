@@ -17,6 +17,10 @@ type PrintToPDFParams struct {
 	MarginLeft          float64 `json:"marginLeft,omitempty"`
 	MarginRight         float64 `json:"marginRight,omitempty"`
 	PreferCSSPageSize   bool    `json:"preferCSSPageSize,omitempty"`
+	DisplayHeaderFooter bool    `json:"displayHeaderFooter,omitempty"`
+	HeaderTemplate      string  `json:"headerTemplate,omitempty"`
+	FooterTemplate      string  `json:"footerTemplate,omitempty"`
+	PageRanges          string  `json:"pageRanges,omitempty"`
 	TransferMode        string  `json:"transferMode,omitempty"`
 }
 
@@ -25,7 +29,7 @@ type PrintToPDFResult struct {
 	Data string `json:"data"`
 }
 
-// Navigate sends Page.navigate and waits for Page.loadEventFired.
+// Navigate sends Page.navigate.
 func Navigate(ctx context.Context, c *Client, url string) error {
 	params := map[string]any{"url": url}
 	return c.Send(ctx, "Page.navigate", params, nil)
@@ -72,6 +76,12 @@ func PrintToPDF(ctx context.Context, c *Client, params PrintToPDFParams) (*Print
 // EnablePage enables Page domain events.
 func EnablePage(ctx context.Context, c *Client) error {
 	return c.Send(ctx, "Page.enable", nil, nil)
+}
+
+// EnableLifecycleEvents enables Page.lifecycleEvent notifications.
+// Must be called after EnablePage. Required to receive networkIdle events.
+func EnableLifecycleEvents(ctx context.Context, c *Client) error {
+	return c.Send(ctx, "Page.setLifecycleEventsEnabled", map[string]any{"enabled": true}, nil)
 }
 
 // EnableNetwork enables Network domain events.

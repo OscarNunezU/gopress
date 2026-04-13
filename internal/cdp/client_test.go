@@ -1,6 +1,7 @@
 package cdp
 
 import (
+	"bufio"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -60,6 +61,7 @@ func newTestClient(t *testing.T) (*Client, net.Conn) {
 
 	c := &Client{
 		conn:      clientConn,
+		reader:    bufio.NewReader(clientConn),
 		logger:    slog.Default(),
 		pending:   make(map[int]chan *Message),
 		listeners: make(map[string][]chan Event),

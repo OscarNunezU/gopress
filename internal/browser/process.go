@@ -60,10 +60,13 @@ func (p *Process) Kill() error {
 	if p.cmd.Process == nil {
 		return nil
 	}
+	pid := p.cmd.Process.Pid
 	if err := p.cmd.Process.Kill(); err != nil {
-		return fmt.Errorf("kill chromium pid %d: %w", p.cmd.Process.Pid, err)
+		return fmt.Errorf("kill chromium pid %d: %w", pid, err)
 	}
-	p.logger.Info("chromium stopped", "pid", p.cmd.Process.Pid)
+	// Wait collects the exit status so the OS can reclaim the process table entry.
+	_ = p.cmd.Wait()
+	p.logger.Info("chromium stopped", "pid", pid)
 	return nil
 }
 

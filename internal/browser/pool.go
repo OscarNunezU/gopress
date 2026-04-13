@@ -19,16 +19,25 @@ type Job struct {
 
 // PDFOptions maps to CDP Page.printToPDF parameters exposed via the API.
 type PDFOptions struct {
-	Landscape         bool
-	PrintBackground   bool
-	Scale             float64
-	PaperWidth        float64
-	PaperHeight       float64
-	MarginTop         float64
-	MarginBottom      float64
-	MarginLeft        float64
-	MarginRight       float64
-	PreferCSSPageSize bool
+	Landscape           bool
+	PrintBackground     bool
+	Scale               float64
+	PaperWidth          float64
+	PaperHeight         float64
+	MarginTop           float64
+	MarginBottom        float64
+	MarginLeft          float64
+	MarginRight         float64
+	PreferCSSPageSize   bool
+	DisplayHeaderFooter bool
+	// HeaderTemplate and FooterTemplate are HTML strings rendered by Chrome.
+	// Use <span class="date">, <span class="title">, <span class="url">,
+	// <span class="pageNumber">, <span class="totalPages"> as placeholders.
+	HeaderTemplate string
+	FooterTemplate string
+	// PageRanges restricts printing to specific pages, e.g. "1-5, 8, 11-13".
+	// Empty string prints all pages.
+	PageRanges string
 }
 
 // Pool manages a fixed set of Chromium instances and queues conversion jobs.
@@ -47,6 +56,7 @@ type slot struct {
 }
 
 type pendingJob struct {
+	ctx    context.Context
 	job    *Job
 	result chan<- jobResult
 }
@@ -90,7 +100,7 @@ func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, e
 func (p *Pool) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	result := make(chan jobResult, 1)
 	select {
-	case p.queue <- &pendingJob{job: job, result: result}:
+	case p.queue <- &pendingJob{ctx: ctx, job: job, result: result}:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -117,7 +127,7 @@ func (p *Pool) Close() {
 
 func (p *Pool) worker(s *slot) {
 	for pj := range p.queue {
-		pdf, err := s.inst.Convert(context.Background(), pj.job)
+		pdf, err := s.inst.Convert(pj.ctx, pj.job)
 		pj.result <- jobResult{pdf: pdf, err: err}
 
 		if s.inst.NeedsRestart() {

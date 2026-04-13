@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -34,7 +35,11 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 		pdf, err := conv.Convert(r.Context(), html, assets, opts)
 		if err != nil {
 			logger.Error("conversion failed", "err", err)
-			http.Error(w, "conversion failed", http.StatusInternalServerError)
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				http.Error(w, "conversion timeout", http.StatusGatewayTimeout)
+			} else {
+				http.Error(w, "conversion failed", http.StatusInternalServerError)
+			}
 			return
 		}
 

@@ -58,14 +58,14 @@ type PoolConfig struct {
 }
 
 // NewPool creates and starts a pool of Chromium instances.
-func NewPool(cfg PoolConfig, logger *slog.Logger) (*Pool, error) {
+func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, error) {
 	p := &Pool{
 		queue:  make(chan *pendingJob, cfg.Size*4),
 		logger: logger,
 	}
 
 	for i := range cfg.Size {
-		inst, err := NewInstance(cfg.BinPath, cfg.BasePort+i, cfg.MaxConversions, logger)
+		inst, err := NewInstance(ctx, cfg.BinPath, cfg.BasePort+i, cfg.MaxConversions, logger)
 		if err != nil {
 			p.Close()
 			return nil, fmt.Errorf("init pool instance %d: %w", i, err)

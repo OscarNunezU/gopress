@@ -18,8 +18,8 @@ type Instance struct {
 }
 
 // NewInstance starts a Chromium process and returns a ready Instance.
-func NewInstance(binPath string, port int, maxConversions int, logger *slog.Logger) (*Instance, error) {
-	proc, err := Start(binPath, port, logger)
+func NewInstance(ctx context.Context, binPath string, port int, maxConversions int, logger *slog.Logger) (*Instance, error) {
+	proc, err := Start(ctx, binPath, port, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new instance: %w", err)
 	}

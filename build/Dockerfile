@@ -1,4 +1,4 @@
-ARG CHROME_BASE_IMAGE=ghcr.io/oscarnunezu/gopress-base:130.0.6723.91
+ARG CHROME_BASE_IMAGE=ghcr.io/oscarnunezu/gopress-base:147.0.7727.56
 ARG GOLANG_VERSION=1.23.4
 
 # Pull the Chrome base as a named stage so COPY --from works with an ARG value.

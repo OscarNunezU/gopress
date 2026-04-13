@@ -3,14 +3,14 @@
 # This is what enables air-gapped operation.
 #
 # Usage:
-#   docker build -f build/base.Dockerfile -t ghcr.io/oscarnunezu/gopress-base:130.0.6723.91 .
-#   docker push ghcr.io/oscarnunezu/gopress-base:130.0.6723.91
+#   docker build -f build/base.Dockerfile -t ghcr.io/oscarnunezu/gopress-base:147.0.7727.56 .
+#   docker push ghcr.io/oscarnunezu/gopress-base:147.0.7727.56
 
 FROM debian:13-slim
 
 # Pinned Chrome for Testing version.
 # Check latest stable: https://googlechromelabs.github.io/chrome-for-testing/
-ARG CHROME_VERSION=130.0.6723.91
+ARG CHROME_VERSION=147.0.7727.56
 
 RUN apt-get update -qq \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \

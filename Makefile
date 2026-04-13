@@ -1,6 +1,6 @@
 BINARY        = gopress
 VERSION      ?= dev
-CHROME_VERSION ?= 130.0.6723.91
+CHROME_VERSION ?= 147.0.7727.56
 DOCKER_REPO   = ghcr.io/oscarnunezu/gopress
 DOCKERFILE    = build/Dockerfile
 BASE_IMAGE    = $(DOCKER_REPO)-base:$(CHROME_VERSION)

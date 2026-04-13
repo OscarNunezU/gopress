@@ -7,6 +7,9 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/OscarNunezU/gopress/internal/browser"
+	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
 
 // Server is the gopress HTTP server.
@@ -23,6 +26,11 @@ type Config struct {
 	IdleTimeout  time.Duration
 }
 
+// converterIface allows injecting the converter without a circular import.
+type converterIface interface {
+	Convert(ctx context.Context, html string, assets map[string][]byte, opts browser.PDFOptions) ([]byte, error)
+}
+
 // New creates a configured Server with all routes registered.
 func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
@@ -31,6 +39,7 @@ func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 	mux.Handle("POST /pdf", convertHandler(converter, logger))
 	mux.Handle("GET /health", healthHandler())
 	mux.Handle("GET /version", versionHandler())
+	mux.Handle("GET /metrics", telemetry.Handler())
 
 	s.http = &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -55,9 +64,4 @@ func (s *Server) Start() error {
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
-}
-
-// converterIface allows injecting the converter without a circular import.
-type converterIface interface {
-	Convert(ctx context.Context, html string, assets map[string][]byte, opts any) ([]byte, error)
 }

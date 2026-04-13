@@ -1,12 +1,17 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+
+	"github.com/OscarNunezU/gopress/internal/browser"
 )
+
+// errMissingHTML is returned when the multipart form has no index.html field.
+var errMissingHTML = errors.New("index.html is required")
 
 // convertHandler handles POST /pdf.
 // Accepts multipart/form-data with:
@@ -39,33 +44,34 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 	})
 }
 
-func parseForm(r *http.Request) (html string, assets map[string][]byte, opts any, err error) {
+func parseForm(r *http.Request) (html string, assets map[string][]byte, opts browser.PDFOptions, err error) {
 	assets = make(map[string][]byte)
 
 	for name, headers := range r.MultipartForm.File {
 		f, ferr := headers[0].Open()
 		if ferr != nil {
-			return "", nil, nil, ferr
+			return "", nil, opts, ferr
 		}
 		data, ferr := io.ReadAll(f)
 		f.Close()
 		if ferr != nil {
-			return "", nil, nil, ferr
+			return "", nil, opts, ferr
 		}
 
-		if name == "index.html" {
+		switch name {
+		case "index.html":
 			html = string(data)
-		} else if name == "options.json" {
+		case "options.json":
 			if jerr := json.Unmarshal(data, &opts); jerr != nil {
-				return "", nil, nil, jerr
+				return "", nil, opts, jerr
 			}
-		} else {
+		default:
 			assets[name] = data
 		}
 	}
 
 	if html == "" {
-		return "", nil, nil, context.DeadlineExceeded // placeholder — will be a proper sentinel error
+		return "", nil, opts, errMissingHTML
 	}
 	return html, assets, opts, nil
 }

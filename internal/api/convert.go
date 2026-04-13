@@ -11,6 +11,7 @@ import (
 	"github.com/OscarNunezU/gopress/internal/browser"
 )
 
+
 // errMissingHTML is returned when the multipart form has no index.html field.
 var errMissingHTML = errors.New("index.html is required")
 
@@ -34,10 +35,13 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 
 		pdf, err := conv.Convert(r.Context(), html, assets, opts)
 		if err != nil {
-			logger.Error("conversion failed", "err", err)
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			switch {
+			case errors.Is(err, browser.ErrQueueFull):
+				http.Error(w, "server overloaded, try again later", http.StatusServiceUnavailable)
+			case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 				http.Error(w, "conversion timeout", http.StatusGatewayTimeout)
-			} else {
+			default:
+				logger.Error("conversion failed", "err", err)
 				http.Error(w, "conversion failed", http.StatusInternalServerError)
 			}
 			return

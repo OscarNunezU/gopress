@@ -2,18 +2,22 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
+
+	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
+
+// ErrQueueFull is returned by Convert when all queue slots are occupied.
+// API handlers should map this to 503 Service Unavailable.
+var ErrQueueFull = errors.New("conversion queue is full")
 
 // Job holds the input and options for a single HTML→PDF conversion.
 type Job struct {
-	// HTML is the raw HTML content to convert.
-	HTML string
-	// Assets maps filename to content (CSS, images, fonts, etc.)
-	Assets map[string][]byte
-	// Options controls PDF output parameters.
+	HTML    string
+	Assets  map[string][]byte
 	Options PDFOptions
 }
 
@@ -49,7 +53,6 @@ type Pool struct {
 	logger *slog.Logger
 }
 
-// slot tracks one instance position in the pool (index + current instance).
 type slot struct {
 	index int
 	inst  *Instance
@@ -93,16 +96,26 @@ func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, e
 		go p.worker(s)
 	}
 
+	// All instances are idle at startup.
+	telemetry.PoolFreeInstances.Set(float64(cfg.Size))
+
 	return p, nil
 }
 
 // Convert submits a job to the pool and waits for the result.
+// Returns ErrQueueFull immediately if the queue buffer is at capacity,
+// so callers can shed load with 503 instead of accumulating goroutines.
 func (p *Pool) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	result := make(chan jobResult, 1)
+	pj := &pendingJob{ctx: ctx, job: job, result: result}
+
 	select {
-	case p.queue <- &pendingJob{ctx: ctx, job: job, result: result}:
+	case p.queue <- pj:
+		telemetry.PoolQueueSize.Inc()
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	default:
+		return nil, ErrQueueFull
 	}
 
 	select {
@@ -127,8 +140,13 @@ func (p *Pool) Close() {
 
 func (p *Pool) worker(s *slot) {
 	for pj := range p.queue {
+		telemetry.PoolQueueSize.Dec()
+		telemetry.PoolFreeInstances.Dec()
+
 		pdf, err := s.inst.Convert(pj.ctx, pj.job)
 		pj.result <- jobResult{pdf: pdf, err: err}
+
+		telemetry.PoolFreeInstances.Inc()
 
 		if s.inst.NeedsRestart() {
 			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index)

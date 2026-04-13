@@ -181,6 +181,40 @@ func TestConvertHandlerConverterError(t *testing.T) {
 	}
 }
 
+func TestConvertHandlerQueueFull(t *testing.T) {
+	conv := &mockConverter{err: browser.ErrQueueFull}
+
+	body, ct := buildMultipart(t, map[string][]byte{
+		"index.html": []byte("<html/>"),
+	})
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", ct)
+	w := httptest.NewRecorder()
+
+	convertHandler(conv, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestConvertHandlerTimeout(t *testing.T) {
+	conv := &mockConverter{err: context.DeadlineExceeded}
+
+	body, ct := buildMultipart(t, map[string][]byte{
+		"index.html": []byte("<html/>"),
+	})
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", ct)
+	w := httptest.NewRecorder()
+
+	convertHandler(conv, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusGatewayTimeout {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusGatewayTimeout)
+	}
+}
+
 func TestConvertHandlerInvalidMultipart(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", bytes.NewBufferString("not multipart"))
 	r.Header.Set("Content-Type", "multipart/form-data; boundary=missing")

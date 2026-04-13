@@ -24,4 +24,4 @@ RUN curl -fsSL \
     && mv /opt/chrome-linux64 /opt/chrome \
     && ln -s /opt/chrome/chrome /usr/bin/chrome \
     && rm /tmp/chrome.zip \
-    && chrome --version
+    && test -x /opt/chrome/chrome

@@ -1,11 +1,13 @@
-BINARY       = gopress
-VERSION     ?= dev
-DOCKER_REPO  = ghcr.io/oscarnunezu/gopress
-DOCKERFILE   = build/Dockerfile
+BINARY        = gopress
+VERSION      ?= dev
+CHROME_VERSION ?= 130.0.6723.91
+DOCKER_REPO   = ghcr.io/oscarnunezu/gopress
+DOCKERFILE    = build/Dockerfile
+BASE_IMAGE    = $(DOCKER_REPO)-base:$(CHROME_VERSION)
 
 .PHONY: help
 help: ## Show available targets
-	@grep -hE '^[A-Za-z0-9_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS=":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[A-Za-z0-9_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS=":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: build
 build: ## Build the gopress binary
@@ -13,23 +15,40 @@ build: ## Build the gopress binary
 		-o $(BINARY) ./cmd/server
 
 .PHONY: run
-run: build ## Build and run locally
-	./$(BINARY)
+run: build ## Build and run locally (set CHROME_BIN_PATH to your local Chrome)
+	CHROME_BIN_PATH=$${CHROME_BIN_PATH:-/usr/bin/google-chrome} ./$(BINARY)
 
 .PHONY: test
-test: ## Run unit tests
+test: ## Run unit tests with race detector
 	go test -race ./...
 
+.PHONY: coverage
+coverage: ## Run tests and open HTML coverage report
+	go test -race -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+
 .PHONY: docker-base
-docker-base: ## Build the Chrome for Testing base image
-	docker build -f build/base.Dockerfile -t $(DOCKER_REPO)-base:latest .
+docker-base: ## Build the Chrome for Testing base image (CHROME_VERSION=x.y.z)
+	docker build \
+		--build-arg CHROME_VERSION=$(CHROME_VERSION) \
+		-f build/base.Dockerfile \
+		-t $(BASE_IMAGE) .
+
+.PHONY: docker-push-base
+docker-push-base: ## Push the Chrome base image to GHCR
+	docker push $(BASE_IMAGE)
 
 .PHONY: docker-build
 docker-build: ## Build the gopress Docker image
 	docker build \
 		--build-arg VERSION=$(VERSION) \
+		--build-arg CHROME_BASE_IMAGE=$(BASE_IMAGE) \
 		-t $(DOCKER_REPO):$(VERSION) \
 		-f $(DOCKERFILE) .
+
+.PHONY: docker-push
+docker-push: ## Push the gopress image to GHCR
+	docker push $(DOCKER_REPO):$(VERSION)
 
 .PHONY: docker-run
 docker-run: ## Run gopress in Docker
@@ -41,9 +60,9 @@ lint: ## Lint the codebase
 
 .PHONY: fmt
 fmt: ## Format code and tidy dependencies
-	go fix ./...
+	go fmt ./...
 	go mod tidy
 
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -f $(BINARY)
+	rm -f $(BINARY) coverage.out coverage.html

@@ -1,5 +1,8 @@
 ARG CHROME_BASE_IMAGE=ghcr.io/oscarnunezu/gopress-base:130.0.6723.91
-ARG GOLANG_VERSION=1.23
+ARG GOLANG_VERSION=1.23.4
+
+# Pull the Chrome base as a named stage so COPY --from works with an ARG value.
+FROM ${CHROME_BASE_IMAGE} AS chrome-base
 
 # ----------------------------------------------
 # Go build stage
@@ -62,8 +65,8 @@ RUN groupadd --gid ${GOPRESS_USER_GID} gopress \
     && mkdir /home/gopress \
     && chown gopress: /home/gopress
 
-# Copy Chrome binary from base image.
-COPY --from=${CHROME_BASE_IMAGE} /opt/chrome /opt/chrome
+# Copy Chrome binary from base image stage.
+COPY --from=chrome-base /opt/chrome /opt/chrome
 RUN ln -s /opt/chrome/chrome /usr/bin/chrome
 
 # Copy gopress binary.
@@ -81,6 +84,9 @@ USER gopress
 WORKDIR /home/gopress
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:${GOPRESS_PORT}/health || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["gopress"]

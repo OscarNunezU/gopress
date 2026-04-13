@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
 	"github.com/OscarNunezU/gopress/internal/browser"
 	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
@@ -26,6 +29,14 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 		return nil, fmt.Errorf("html content is required")
 	}
 
+	ctx, span := telemetry.Tracer().Start(ctx, "conversion")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("html.length", len(html)),
+		attribute.Int("assets.count", len(assets)),
+	)
+
 	start := time.Now()
 	job := &browser.Job{
 		HTML:    html,
@@ -39,6 +50,8 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 	status := "ok"
 	if err != nil {
 		status = "error"
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
 	}
 
 	telemetry.ConversionsTotal.WithLabelValues(status).Inc()
@@ -48,5 +61,6 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 		return nil, fmt.Errorf("convert html to pdf: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int("pdf.size_bytes", len(pdf)))
 	return pdf, nil
 }

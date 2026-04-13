@@ -210,8 +210,13 @@ func waitForLoad(ctx context.Context, client *cdp.Client) error {
 }
 
 // newTarget calls /json/new on the browser and returns (wsURL, targetID).
+// Chrome 113+ requires PUT; GET was deprecated and returns a plain-text warning.
 func newTarget(host string) (wsURL string, targetID string, err error) {
-	resp, err := http.Get("http://" + host + "/json/new") //nolint:noctx
+	req, err := http.NewRequest(http.MethodPut, "http://"+host+"/json/new", nil)
+	if err != nil {
+		return "", "", fmt.Errorf("build new-target request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req) //nolint:noctx
 	if err != nil {
 		return "", "", fmt.Errorf("create target: %w", err)
 	}

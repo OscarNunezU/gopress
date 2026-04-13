@@ -1,6 +1,9 @@
 package cdp
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // PrintToPDFParams maps to Page.printToPDF CDP command parameters.
 type PrintToPDFParams struct {
@@ -28,13 +31,33 @@ func Navigate(ctx context.Context, c *Client, url string) error {
 	return c.Send(ctx, "Page.navigate", params, nil)
 }
 
-// SetDocumentContent sets the HTML content of the current page directly.
+// SetDocumentContent sets the HTML content of the current page.
+// It resolves the main frame ID via Page.getFrameTree automatically.
 func SetDocumentContent(ctx context.Context, c *Client, html string) error {
+	frameID, err := mainFrameID(ctx, c)
+	if err != nil {
+		return fmt.Errorf("get main frame id: %w", err)
+	}
 	params := map[string]any{
-		"frameId": "", // TODO: obtain frameId from Page.getFrameTree
+		"frameId": frameID,
 		"html":    html,
 	}
 	return c.Send(ctx, "Page.setDocumentContent", params, nil)
+}
+
+// mainFrameID returns the top-level frame ID via Page.getFrameTree.
+func mainFrameID(ctx context.Context, c *Client) (string, error) {
+	var result struct {
+		FrameTree struct {
+			Frame struct {
+				ID string `json:"id"`
+			} `json:"frame"`
+		} `json:"frameTree"`
+	}
+	if err := c.Send(ctx, "Page.getFrameTree", nil, &result); err != nil {
+		return "", err
+	}
+	return result.FrameTree.Frame.ID, nil
 }
 
 // PrintToPDF triggers PDF generation and returns the base64-encoded result.

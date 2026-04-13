@@ -1,0 +1,71 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+)
+
+// convertHandler handles POST /pdf.
+// Accepts multipart/form-data with:
+//   - index.html (required)
+//   - any number of asset files (CSS, images, fonts, etc.)
+//   - options.json (optional PDF options)
+func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			return
+		}
+
+		html, assets, opts, err := parseForm(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		pdf, err := conv.Convert(r.Context(), html, assets, opts)
+		if err != nil {
+			logger.Error("conversion failed", "err", err)
+			http.Error(w, "conversion failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/pdf")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdf)
+	})
+}
+
+func parseForm(r *http.Request) (html string, assets map[string][]byte, opts any, err error) {
+	assets = make(map[string][]byte)
+
+	for name, headers := range r.MultipartForm.File {
+		f, ferr := headers[0].Open()
+		if ferr != nil {
+			return "", nil, nil, ferr
+		}
+		data, ferr := io.ReadAll(f)
+		f.Close()
+		if ferr != nil {
+			return "", nil, nil, ferr
+		}
+
+		if name == "index.html" {
+			html = string(data)
+		} else if name == "options.json" {
+			if jerr := json.Unmarshal(data, &opts); jerr != nil {
+				return "", nil, nil, jerr
+			}
+		} else {
+			assets[name] = data
+		}
+	}
+
+	if html == "" {
+		return "", nil, nil, context.DeadlineExceeded // placeholder — will be a proper sentinel error
+	}
+	return html, assets, opts, nil
+}

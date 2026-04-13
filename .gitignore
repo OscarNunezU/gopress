@@ -1,0 +1,28 @@
+# Binary
+gopress
+gopress.exe
+
+# Build artifacts
+dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Go
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test output
+*.out
+coverage.html

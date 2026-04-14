@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+# GitHub is migrating action runners from Node.js 20 → 24.
+# This opts in now so we don't break on June 2 2026 when 24 becomes the default.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     name: Build & Test

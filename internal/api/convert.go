@@ -11,6 +11,8 @@ import (
 	"github.com/OscarNunezU/gopress/internal/browser"
 )
 
+// maxUploadBytes is the hard limit on multipart request body size (64 MiB).
+const maxUploadBytes = 64 << 20
 
 // errMissingHTML is returned when the multipart form has no index.html field.
 var errMissingHTML = errors.New("index.html is required")
@@ -22,7 +24,13 @@ var errMissingHTML = errors.New("index.html is required")
 //   - options.json (optional PDF options)
 func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "invalid multipart form", http.StatusBadRequest)
 			return
 		}

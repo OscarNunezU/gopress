@@ -26,6 +26,11 @@ jobs:
       - name: Build
         run: CGO_ENABLED=0 go build ./...
 
+      - name: Verify go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: Test (race detector)
         run: go test -race -coverprofile=coverage.out ./...
 
@@ -52,7 +57,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.6
 
   publish:
     name: Build, Sign & SBOM

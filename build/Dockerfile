@@ -95,7 +95,7 @@ EXPOSE 3000
 
 # Uses the gopress binary itself as the health probe — no extra tooling (curl/wget)
 # needed in the image. The binary reads GOPRESS_PORT from the environment.
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD ["/usr/bin/gopress", "--healthcheck"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

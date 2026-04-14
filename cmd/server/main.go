@@ -37,6 +37,10 @@ func main() {
 	slog.SetDefault(logger)
 
 	cfg := loadConfig()
+	if err := validateConfig(cfg); err != nil {
+		logger.Error("invalid configuration", "err", err)
+		os.Exit(1)
+	}
 
 	// Telemetry.
 	telemetry.Register()
@@ -130,4 +134,20 @@ func envInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func validateConfig(cfg config) error {
+	if cfg.poolSize <= 0 {
+		return fmt.Errorf("GOPRESS_POOL_SIZE must be > 0, got %d", cfg.poolSize)
+	}
+	if cfg.maxConversions < 0 {
+		return fmt.Errorf("GOPRESS_MAX_CONVERSIONS must be >= 0, got %d", cfg.maxConversions)
+	}
+	if cfg.port <= 0 || cfg.port > 65535 {
+		return fmt.Errorf("GOPRESS_PORT must be 1–65535, got %d", cfg.port)
+	}
+	if cfg.chromeBin == "" {
+		return fmt.Errorf("CHROME_BIN_PATH must not be empty")
+	}
+	return nil
 }

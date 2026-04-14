@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -233,6 +235,11 @@ func (i *Instance) convertWithAssets(ctx context.Context, session *cdp.Session, 
 			http.NotFound(w, r)
 			return
 		}
+		ct := mime.TypeByExtension(filepath.Ext(name))
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		w.Header().Set("Content-Type", ct)
 		w.Write(data) //nolint:errcheck
 	})
 

@@ -37,6 +37,7 @@ type Client struct {
 	sessionListeners map[string]map[string][]chan Event
 	writeMu          sync.Mutex
 	done             chan struct{}
+	closeOnce        sync.Once // ensures done is closed exactly once
 }
 
 // Dial connects to a CDP WebSocket endpoint.
@@ -93,11 +94,7 @@ func (c *Client) NewSession(sessionID string) *Session {
 
 // Close shuts down the WebSocket connection.
 func (c *Client) Close() error {
-	select {
-	case <-c.done:
-	default:
-		close(c.done)
-	}
+	c.closeOnce.Do(func() { close(c.done) })
 	return c.conn.Close()
 }
 
@@ -165,16 +162,10 @@ func (c *Client) subscribe(sessionID, method string) <-chan Event {
 // readLoop reads incoming WebSocket frames and dispatches to pending commands
 // or event listeners, routing by sessionId for tab-scoped events.
 func (c *Client) readLoop() {
-	defer func() {
-		select {
-		case <-c.done:
-		default:
-			close(c.done)
-		}
-	}()
+	defer c.closeOnce.Do(func() { close(c.done) })
 
 	for {
-		data, err := readFrame(c.reader)
+		opcode, data, err := readFrame(c.reader)
 		if err != nil {
 			select {
 			case <-c.done:
@@ -185,8 +176,17 @@ func (c *Client) readLoop() {
 			}
 			return
 		}
+
+		switch opcode {
+		case 0x9: // ping — respond with pong per RFC 6455 §5.5.3
+			_ = c.writePongFrame(data)
+			continue
+		case 0xA: // pong — ignore
+			continue
+		}
+
 		if len(data) == 0 {
-			continue // ping / pong control frame
+			continue
 		}
 
 		var msg Message
@@ -236,6 +236,38 @@ func (c *Client) readLoop() {
 	}
 }
 
+// writePongFrame sends a masked WebSocket pong frame (RFC 6455 §5.5.3).
+// Control frames must not exceed 125 bytes per the spec.
+func (c *Client) writePongFrame(payload []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	// Truncate to the control frame payload limit.
+	if len(payload) > 125 {
+		payload = payload[:125]
+	}
+
+	mask := make([]byte, 4)
+	if _, err := io.ReadFull(rand.Reader, mask); err != nil {
+		return fmt.Errorf("pong mask: %w", err)
+	}
+
+	masked := make([]byte, len(payload))
+	for i, b := range payload {
+		masked[i] = b ^ mask[i%4]
+	}
+
+	frame := []byte{
+		0x8A,                        // FIN=1, opcode=0xA (pong)
+		byte(len(payload)) | 0x80,   // MASK=1, 7-bit length (≤125)
+	}
+	frame = append(frame, mask...)
+	frame = append(frame, masked...)
+
+	_, err := c.conn.Write(frame)
+	return err
+}
+
 // writeFrame sends a WebSocket text frame with the given payload.
 // Frames sent by the client must be masked per RFC 6455.
 func (c *Client) writeFrame(payload []byte) error {
@@ -278,15 +310,17 @@ func (c *Client) writeFrame(payload []byte) error {
 	return err
 }
 
-// readFrame reads one complete WebSocket frame from r and returns the payload.
-// Returns (nil, io.EOF) for a close frame; (nil, nil) for ping/pong.
-func readFrame(r io.Reader) ([]byte, error) {
+// readFrame reads one complete WebSocket frame from r.
+// Returns (opcode, payload, nil) on success.
+// Returns (0, nil, io.EOF) for a close frame.
+// Returns (0x9, payload, nil) for a ping; (0xA, payload, nil) for a pong.
+func readFrame(r io.Reader) (opcode byte, payload []byte, err error) {
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, fmt.Errorf("read header: %w", err)
+		return 0, nil, fmt.Errorf("read header: %w", err)
 	}
 
-	opcode := header[0] & 0x0f
+	op := header[0] & 0x0f
 	masked := (header[1] & 0x80) != 0
 	length := int(header[1] & 0x7f)
 
@@ -294,13 +328,13 @@ func readFrame(r io.Reader) ([]byte, error) {
 	case 126:
 		ext := make([]byte, 2)
 		if _, err := io.ReadFull(r, ext); err != nil {
-			return nil, fmt.Errorf("read 16-bit length: %w", err)
+			return 0, nil, fmt.Errorf("read 16-bit length: %w", err)
 		}
 		length = int(binary.BigEndian.Uint16(ext))
 	case 127:
 		ext := make([]byte, 8)
 		if _, err := io.ReadFull(r, ext); err != nil {
-			return nil, fmt.Errorf("read 64-bit length: %w", err)
+			return 0, nil, fmt.Errorf("read 64-bit length: %w", err)
 		}
 		length = int(binary.BigEndian.Uint64(ext))
 	}
@@ -309,28 +343,25 @@ func readFrame(r io.Reader) ([]byte, error) {
 	if masked {
 		mask = make([]byte, 4)
 		if _, err := io.ReadFull(r, mask); err != nil {
-			return nil, fmt.Errorf("read mask: %w", err)
+			return 0, nil, fmt.Errorf("read mask: %w", err)
 		}
 	}
 
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(r, payload); err != nil {
-		return nil, fmt.Errorf("read payload: %w", err)
+	buf := make([]byte, length)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return 0, nil, fmt.Errorf("read payload: %w", err)
 	}
 
 	if masked {
-		for i, b := range payload {
-			payload[i] = b ^ mask[i%4]
+		for i, b := range buf {
+			buf[i] = b ^ mask[i%4]
 		}
 	}
 
-	switch opcode {
-	case 0x8:
-		return nil, io.EOF
-	case 0x9, 0xA:
-		return nil, nil
+	if op == 0x8 {
+		return 0, nil, io.EOF
 	}
-	return payload, nil
+	return op, buf, nil
 }
 
 // wsHandshake performs the HTTP→WebSocket upgrade handshake per RFC 6455.

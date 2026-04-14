@@ -61,6 +61,7 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 		return nil, fmt.Errorf("convert html to pdf: %w", err)
 	}
 
+	telemetry.ConversionSizeBytes.Observe(float64(len(pdf)))
 	span.SetAttributes(attribute.Int("pdf.size_bytes", len(pdf)))
 	return pdf, nil
 }
@@ -69,7 +70,7 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 //
 //   - "ok"           — no error
 //   - "queue_full"   — pool queue was at capacity (ErrQueueFull)
-//   - "timeout"      — request context exceeded its deadline
+//   - "timeout"      — request context exceeded its deadline or was cancelled
 //   - "chrome_error" — any other Chrome/CDP failure
 func conversionStatus(err error) string {
 	if err == nil {

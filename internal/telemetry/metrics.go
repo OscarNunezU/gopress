@@ -26,6 +26,13 @@ var (
 		[]string{"status"},
 	)
 
+	// ConversionSizeBytes tracks the distribution of generated PDF sizes.
+	ConversionSizeBytes = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "gopress_conversion_size_bytes",
+		Help:    "Size in bytes of generated PDF files.",
+		Buckets: []float64{10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000, 10_000_000},
+	})
+
 	PoolQueueSize = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "gopress_pool_queue_size",
 		Help: "Number of conversion jobs waiting in the pool queue.",
@@ -35,6 +42,12 @@ var (
 		Name: "gopress_pool_free_instances",
 		Help: "Number of idle Chromium instances in the pool.",
 	})
+
+	// PoolRestarts counts Chromium instance restarts (max_conversions quota reached).
+	PoolRestarts = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "gopress_pool_restarts_total",
+		Help: "Total number of Chromium instance restarts.",
+	})
 )
 
 // Register registers all gopress metrics with the default Prometheus registry.
@@ -42,8 +55,10 @@ func Register() {
 	prometheus.MustRegister(
 		ConversionsTotal,
 		ConversionDuration,
+		ConversionSizeBytes,
 		PoolQueueSize,
 		PoolFreeInstances,
+		PoolRestarts,
 	)
 }
 

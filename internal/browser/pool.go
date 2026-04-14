@@ -59,6 +59,7 @@ type Pool struct {
 	slots       []*slot
 	queue       chan *pendingJob
 	mu          sync.Mutex
+	closeOnce   sync.Once // ensures Close is idempotent
 	logger      *slog.Logger
 	newInstance func(ctx context.Context, port int) (instance, error)
 }
@@ -146,16 +147,18 @@ func (p *Pool) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	}
 }
 
-// Close shuts down all Chromium instances.
+// Close shuts down all Chromium instances. Safe to call multiple times.
 func (p *Pool) Close() {
-	close(p.queue)
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, s := range p.slots {
-		if err := s.inst.Close(); err != nil {
-			p.logger.Error("close instance", "err", err)
+	p.closeOnce.Do(func() {
+		close(p.queue)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		for _, s := range p.slots {
+			if err := s.inst.Close(); err != nil {
+				p.logger.Error("close instance", "err", err)
+			}
 		}
-	}
+	})
 }
 
 func (p *Pool) worker(s *slot) {
@@ -169,6 +172,7 @@ func (p *Pool) worker(s *slot) {
 		telemetry.PoolFreeInstances.Inc()
 
 		if s.inst.NeedsRestart() {
+			telemetry.PoolRestarts.Inc()
 			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index)
 			if err := p.restart(s); err != nil {
 				p.logger.Error("instance restart failed", "err", err, "port", p.cfg.BasePort+s.index)

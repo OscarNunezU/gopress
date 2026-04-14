@@ -60,12 +60,13 @@ func newTestClient(t *testing.T) (*Client, net.Conn) {
 	})
 
 	c := &Client{
-		conn:      clientConn,
-		reader:    bufio.NewReader(clientConn),
-		logger:    slog.Default(),
-		pending:   make(map[int]chan *Message),
-		listeners: make(map[string][]chan Event),
-		done:      make(chan struct{}),
+		conn:             clientConn,
+		reader:           bufio.NewReader(clientConn),
+		logger:           slog.Default(),
+		pending:          make(map[int]chan *Message),
+		listeners:        make(map[string][]chan Event),
+		sessionListeners: make(map[string]map[string][]chan Event),
+		done:             make(chan struct{}),
 	}
 	go c.readLoop()
 	t.Cleanup(func() { c.Close() })
@@ -81,7 +82,7 @@ func TestReadFrameSmall(t *testing.T) {
 	payload := []byte(`{"method":"Page.loadEventFired"}`)
 	go func() { _ = writeServerFrame(serverConn, payload) }()
 
-	got, err := readFrame(clientConn)
+	_, got, err := readFrame(clientConn)
 	if err != nil {
 		t.Fatalf("readFrame: %v", err)
 	}
@@ -102,7 +103,7 @@ func TestReadFrameLarge(t *testing.T) {
 	}
 	go func() { _ = writeServerFrame(serverConn, payload) }()
 
-	got, err := readFrame(clientConn)
+	_, got, err := readFrame(clientConn)
 	if err != nil {
 		t.Fatalf("readFrame large: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestClientSend(t *testing.T) {
 
 	go func() {
 		// Read request from client (masked frame).
-		data, err := readFrame(server)
+		_, data, err := readFrame(server)
 		if err != nil {
 			return
 		}
@@ -150,7 +151,7 @@ func TestClientSendError(t *testing.T) {
 	c, server := newTestClient(t)
 
 	go func() {
-		data, err := readFrame(server)
+		_, data, err := readFrame(server)
 		if err != nil {
 			return
 		}
@@ -204,7 +205,7 @@ func TestClientSendContextCancel(t *testing.T) {
 	// Drain frames so writeFrame doesn't block on net.Pipe, but never send a response.
 	go func() {
 		for {
-			if _, err := readFrame(server); err != nil {
+			if _, _, err := readFrame(server); err != nil {
 				return
 			}
 		}

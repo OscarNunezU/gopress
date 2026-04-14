@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -16,6 +18,21 @@ import (
 )
 
 func main() {
+	// Fast-path: healthcheck mode — invoked by the Docker HEALTHCHECK instruction.
+	// Using the binary itself avoids shipping curl/wget in the production image.
+	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
+		port := envInt("GOPRESS_PORT", 3000)
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port)) //nolint:noctx
+		if err != nil {
+			os.Exit(1)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 

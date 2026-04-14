@@ -8,6 +8,10 @@ services:
       GOPRESS_POOL_SIZE: "2"
       GOPRESS_MAX_CONVERSIONS: "100"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+    security_opt:
+      # Hardened seccomp profile — denies all syscalls not explicitly required
+      # by Chrome headless (--no-sandbox) and the gopress Go binary.
+      - seccomp:./build/chrome.seccomp.json
     depends_on:
       - prometheus
       - jaeger

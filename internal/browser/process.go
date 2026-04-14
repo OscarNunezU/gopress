@@ -12,6 +12,12 @@ import (
 // chromeFlags are the flags required for headless PDF generation.
 var chromeFlags = []string{
 	"--headless=new",
+	// --no-sandbox disables Chrome's internal process sandbox.
+	// This is the standard practice for containerised Chrome (used by Puppeteer,
+	// Playwright, and chromedp). The container itself — running as non-root UID 1001
+	// with its own Linux namespaces — provides equivalent isolation. Chrome's sandbox
+	// requires CLONE_NEWPID/CLONE_NEWUSER, which are typically unavailable inside a
+	// container without elevated privileges.
 	"--no-sandbox",
 	"--disable-gpu",
 	"--disable-dev-shm-usage",

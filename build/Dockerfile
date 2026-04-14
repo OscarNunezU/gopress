@@ -1,5 +1,5 @@
 ARG CHROME_BASE_IMAGE=ghcr.io/oscarnunezu/gopress-base:147.0.7727.56
-ARG GOLANG_VERSION=1.23.4
+ARG GOLANG_VERSION=1.26.2
 
 # Pull the Chrome base as a named stage so COPY --from works with an ARG value.
 FROM ${CHROME_BASE_IMAGE} AS chrome-base
@@ -8,7 +8,7 @@ FROM ${CHROME_BASE_IMAGE} AS chrome-base
 # Go build stage
 # Pin to an immutable digest — tag alone is mutable.
 # ----------------------------------------------
-FROM golang:1.23.4@sha256:9820aca42262f58451f006de3213055974b36f24b31508c1baa73c967fcecb99 AS build-stage
+FROM golang:1.26.2@sha256:fcdb3e42c5544e9682a635771eac76a698b66de79b1b50ec5b9ce5c5f14ad775 AS build-stage
 
 ARG VERSION=dev
 ENV CGO_ENABLED=0
@@ -38,7 +38,7 @@ ARG GOPRESS_USER_GID=1001
 # Pin APT to a reproducible snapshot so package versions are fixed across builds.
 # Update DEBIAN_SNAPSHOT intentionally when you want security patches.
 # Enterprise alternative: replace the snapshot URL with your internal APT mirror.
-ARG DEBIAN_SNAPSHOT=20260401T000000Z
+ARG DEBIAN_SNAPSHOT=20260414T000000Z
 
 # Chrome runtime dependencies + fonts.
 RUN printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/%s/ trixie main\n\

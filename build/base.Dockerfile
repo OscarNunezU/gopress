@@ -23,7 +23,7 @@ ARG CHROME_SHA256=""
 # Pin APT to a reproducible snapshot so package versions are fixed.
 # Update DEBIAN_SNAPSHOT intentionally when you want security patches.
 # Enterprise alternative: replace the URL with your internal APT mirror.
-ARG DEBIAN_SNAPSHOT=20260401T000000Z
+ARG DEBIAN_SNAPSHOT=20260414T000000Z
 
 RUN printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/%s/ trixie main\n\
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%s/ trixie-security main\n' \

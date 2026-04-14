@@ -20,7 +20,9 @@ import (
 	"sync/atomic"
 )
 
-// Client is a raw CDP client connected to a single browser target via WebSocket.
+// Client is a raw CDP client connected to a Chrome browser process via WebSocket.
+// One Client is created per Chrome process and lives for its entire lifetime.
+// Use NewSession to obtain a tab-scoped session for each conversion.
 type Client struct {
 	conn      net.Conn
 	reader    *bufio.Reader // shared between handshake and readLoop — no bytes lost
@@ -28,28 +30,31 @@ type Client struct {
 	nextID    atomic.Int64
 	mu        sync.Mutex
 	pending   map[int]chan *Message
+	// listeners for browser-level events (sessionId == "").
 	listeners map[string][]chan Event
-	writeMu   sync.Mutex
-	done      chan struct{}
+	// sessionListeners routes events to the correct tab session.
+	// Keyed by sessionId → method → channels.
+	sessionListeners map[string]map[string][]chan Event
+	writeMu          sync.Mutex
+	done             chan struct{}
 }
 
-// Dial connects to a CDP WebSocket endpoint (e.g. ws://localhost:9222/devtools/page/XXX).
+// Dial connects to a CDP WebSocket endpoint.
+// For browser-level connections, use the webSocketDebuggerUrl from /json/version.
 func Dial(ctx context.Context, wsURL string, logger *slog.Logger) (*Client, error) {
 	u, err := url.Parse(wsURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse ws url: %w", err)
 	}
 
-	host := u.Host
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", host)
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", u.Host)
 	if err != nil {
-		return nil, fmt.Errorf("tcp dial %s: %w", host, err)
+		return nil, fmt.Errorf("tcp dial %s: %w", u.Host, err)
 	}
 
 	// The bufio.Reader wraps conn for both the HTTP upgrade response and all
-	// subsequent WebSocket frame reads. Creating a new bufio.Reader only for
-	// the handshake and then switching to raw conn would silently drop any
-	// bytes buffered beyond the HTTP response boundary.
+	// subsequent WebSocket frame reads. Reusing it ensures no bytes are lost
+	// if the upgrade response and first frame arrive in the same TCP segment.
 	br := bufio.NewReader(conn)
 	if err := wsHandshake(conn, br, u); err != nil {
 		conn.Close()
@@ -57,21 +62,49 @@ func Dial(ctx context.Context, wsURL string, logger *slog.Logger) (*Client, erro
 	}
 
 	c := &Client{
-		conn:      conn,
-		reader:    br,
-		logger:    logger,
-		pending:   make(map[int]chan *Message),
-		listeners: make(map[string][]chan Event),
-		done:      make(chan struct{}),
+		conn:             conn,
+		reader:           br,
+		logger:           logger,
+		pending:          make(map[int]chan *Message),
+		listeners:        make(map[string][]chan Event),
+		sessionListeners: make(map[string]map[string][]chan Event),
+		done:             make(chan struct{}),
 	}
 	go c.readLoop()
 	return c, nil
 }
 
-// Send sends a CDP command and waits for its response.
+// Send sends a browser-level CDP command and waits for its response.
 func (c *Client) Send(ctx context.Context, method string, params any, result any) error {
+	return c.send(ctx, "", method, params, result)
+}
+
+// Subscribe registers a channel to receive browser-level CDP events.
+func (c *Client) Subscribe(method string) <-chan Event {
+	return c.subscribe("", method)
+}
+
+// NewSession returns a Session scoped to the given CDP session ID.
+// All commands and subscriptions through the Session are multiplexed over
+// this Client's single WebSocket connection via the flat-session protocol.
+func (c *Client) NewSession(sessionID string) *Session {
+	return &Session{c: c, id: sessionID}
+}
+
+// Close shuts down the WebSocket connection.
+func (c *Client) Close() error {
+	select {
+	case <-c.done:
+	default:
+		close(c.done)
+	}
+	return c.conn.Close()
+}
+
+// send is the shared implementation for both Client and Session commands.
+func (c *Client) send(ctx context.Context, sessionID, method string, params any, result any) error {
 	id := int(c.nextID.Add(1))
-	msg := Message{ID: id, Method: method, Params: params}
+	msg := Message{ID: id, Method: method, Params: params, SessionID: sessionID}
 
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -111,26 +144,26 @@ func (c *Client) Send(ctx context.Context, method string, params any, result any
 	}
 }
 
-// Subscribe registers a channel to receive CDP events for the given method.
-func (c *Client) Subscribe(method string) <-chan Event {
+// subscribe registers an event listener for either browser-level or session events.
+func (c *Client) subscribe(sessionID, method string) <-chan Event {
 	ch := make(chan Event, 8)
 	c.mu.Lock()
-	c.listeners[method] = append(c.listeners[method], ch)
-	c.mu.Unlock()
+	defer c.mu.Unlock()
+
+	if sessionID == "" {
+		c.listeners[method] = append(c.listeners[method], ch)
+		return ch
+	}
+
+	if c.sessionListeners[sessionID] == nil {
+		c.sessionListeners[sessionID] = make(map[string][]chan Event)
+	}
+	c.sessionListeners[sessionID][method] = append(c.sessionListeners[sessionID][method], ch)
 	return ch
 }
 
-// Close shuts down the WebSocket connection.
-func (c *Client) Close() error {
-	select {
-	case <-c.done:
-	default:
-		close(c.done)
-	}
-	return c.conn.Close()
-}
-
-// readLoop reads incoming WebSocket frames and dispatches to pending commands or event listeners.
+// readLoop reads incoming WebSocket frames and dispatches to pending commands
+// or event listeners, routing by sessionId for tab-scoped events.
 func (c *Client) readLoop() {
 	defer func() {
 		select {
@@ -153,8 +186,7 @@ func (c *Client) readLoop() {
 			return
 		}
 		if len(data) == 0 {
-			// Control frame with no payload (ping, pong) — skip.
-			continue
+			continue // ping / pong control frame
 		}
 
 		var msg Message
@@ -164,7 +196,7 @@ func (c *Client) readLoop() {
 		}
 
 		if msg.ID != 0 {
-			// Response to a pending command.
+			// Response to a pending command (browser- or session-level).
 			c.mu.Lock()
 			ch, ok := c.pending[msg.ID]
 			if ok {
@@ -177,23 +209,28 @@ func (c *Client) readLoop() {
 			continue
 		}
 
-		// Server-sent event.
-		if msg.Method != "" {
-			evt := Event{Method: msg.Method}
-			if msg.Params != nil {
-				if p, ok := msg.Params.(map[string]any); ok {
-					evt.Params = p
-				}
-			}
-			c.mu.Lock()
-			chs := c.listeners[msg.Method]
-			c.mu.Unlock()
-			for _, ch := range chs {
-				select {
-				case ch <- evt:
-				default:
-					// Drop if listener is not consuming fast enough.
-				}
+		// Server-sent event — dispatch by sessionId.
+		if msg.Method == "" {
+			continue
+		}
+		evt := Event{Method: msg.Method}
+		if p, ok := msg.Params.(map[string]any); ok {
+			evt.Params = p
+		}
+
+		c.mu.Lock()
+		var chs []chan Event
+		if msg.SessionID != "" {
+			chs = c.sessionListeners[msg.SessionID][msg.Method]
+		} else {
+			chs = c.listeners[msg.Method]
+		}
+		c.mu.Unlock()
+
+		for _, ch := range chs {
+			select {
+			case ch <- evt:
+			default: // drop if listener is not consuming fast enough
 			}
 		}
 	}
@@ -205,10 +242,8 @@ func (c *Client) writeFrame(payload []byte) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 
-	// Byte 0: FIN=1, opcode=1 (text).
-	// Byte 1: MASK=1, payload length.
 	header := make([]byte, 2)
-	header[0] = 0x81 // FIN + text frame
+	header[0] = 0x81 // FIN=1, opcode=1 (text)
 
 	length := len(payload)
 	var extra []byte
@@ -243,9 +278,8 @@ func (c *Client) writeFrame(payload []byte) error {
 	return err
 }
 
-// readFrame reads one complete WebSocket frame from r and returns the unmasked payload.
-// Returns (nil, io.EOF) for a close frame (opcode 0x8).
-// Returns (nil, nil) for ping/pong control frames so callers can skip them.
+// readFrame reads one complete WebSocket frame from r and returns the payload.
+// Returns (nil, io.EOF) for a close frame; (nil, nil) for ping/pong.
 func readFrame(r io.Reader) ([]byte, error) {
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
@@ -291,17 +325,16 @@ func readFrame(r io.Reader) ([]byte, error) {
 	}
 
 	switch opcode {
-	case 0x8: // close — server is terminating the connection
+	case 0x8:
 		return nil, io.EOF
-	case 0x9, 0xA: // ping / pong — return empty payload, caller skips
+	case 0x9, 0xA:
 		return nil, nil
 	}
-
 	return payload, nil
 }
 
 // wsHandshake performs the HTTP→WebSocket upgrade handshake per RFC 6455.
-// br must wrap conn so that bytes buffered during http.ReadResponse are not lost.
+// br must wrap conn so bytes buffered during http.ReadResponse are not lost.
 func wsHandshake(conn net.Conn, br *bufio.Reader, u *url.URL) error {
 	keyBytes := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, keyBytes); err != nil {
@@ -309,12 +342,9 @@ func wsHandshake(conn net.Conn, br *bufio.Reader, u *url.URL) error {
 	}
 	key := base64.StdEncoding.EncodeToString(keyBytes)
 
-	path := u.RequestURI()
-	host := u.Host
-
 	req := fmt.Sprintf(
 		"GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
-		path, host, key,
+		u.RequestURI(), u.Host, key,
 	)
 	if _, err := fmt.Fprint(conn, req); err != nil {
 		return fmt.Errorf("send handshake request: %w", err)
@@ -331,11 +361,9 @@ func wsHandshake(conn net.Conn, br *bufio.Reader, u *url.URL) error {
 	}
 
 	expected := wsAcceptKey(key)
-	got := resp.Header.Get("Sec-Websocket-Accept")
-	if got != expected {
+	if got := resp.Header.Get("Sec-Websocket-Accept"); got != expected {
 		return fmt.Errorf("invalid Sec-WebSocket-Accept: got %q want %q", got, expected)
 	}
-
 	return nil
 }
 
@@ -345,4 +373,32 @@ func wsAcceptKey(key string) string {
 	h := sha1.New()
 	h.Write([]byte(key + magic))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+// ---------------------------------------------------------------------------
+// Session — tab-scoped CDP session multiplexed over a single Client connection.
+// ---------------------------------------------------------------------------
+
+// Session multiplexes CDP commands and events for one browser tab over the
+// parent Client's WebSocket connection using flat-mode session IDs.
+type Session struct {
+	c  *Client
+	id string
+}
+
+// Send sends a CDP command scoped to this session's tab.
+func (s *Session) Send(ctx context.Context, method string, params any, result any) error {
+	return s.c.send(ctx, s.id, method, params, result)
+}
+
+// Subscribe registers a channel to receive CDP events from this session's tab.
+func (s *Session) Subscribe(method string) <-chan Event {
+	return s.c.subscribe(s.id, method)
+}
+
+// Close removes all event listeners registered for this session.
+func (s *Session) Close() {
+	s.c.mu.Lock()
+	delete(s.c.sessionListeners, s.id)
+	s.c.mu.Unlock()
 }

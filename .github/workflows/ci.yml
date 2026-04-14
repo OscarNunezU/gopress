@@ -56,10 +56,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      # golangci-lint-action downloads a pre-built binary locked to go1.24,
+      # which refuses to typecheck a module declaring 'go 1.26'. Installing
+      # from source compiles the linter with the system Go (1.26), removing
+      # the version mismatch entirely.
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
 
   publish:
     name: Build, Sign & SBOM

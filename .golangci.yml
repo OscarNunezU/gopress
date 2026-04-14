@@ -1,6 +1,0 @@
-run:
-  # golangci-lint latest (v1.64.x) is built with Go 1.24.
-  # Override the analysis version so it doesn't refuse to run against
-  # go.mod's 'go 1.26' directive. Update when a golangci-lint release
-  # built with Go 1.26+ becomes available.
-  go: '1.24'

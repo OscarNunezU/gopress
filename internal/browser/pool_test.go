@@ -182,7 +182,7 @@ func TestPoolRestartAfterMaxConversions(t *testing.T) {
 }
 
 func TestPoolCloseIdempotent(t *testing.T) {
-	p := newTestPool(t, 1, []*fakeInstance{{}}	)
+	p := newTestPool(t, 1, []*fakeInstance{{}})
 
 	// Should not panic on double close.
 	p.Close()

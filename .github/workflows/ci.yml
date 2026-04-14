@@ -27,9 +27,11 @@ jobs:
         run: CGO_ENABLED=0 go build ./...
 
       - name: Verify go mod tidy
+        # Only check go.sum — go.mod can gain a toolchain directive when tidy
+        # runs with a newer patch (e.g. go1.26.2) than the go directive (go 1.26).
         run: |
           go mod tidy
-          git diff --exit-code go.mod go.sum
+          git diff --exit-code go.sum
 
       - name: Test (race detector)
         run: go test -race -coverprofile=coverage.out ./...
@@ -57,7 +59,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.64.6
+          version: latest
 
   publish:
     name: Build, Sign & SBOM

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
@@ -13,6 +14,14 @@ import (
 // ErrQueueFull is returned by Convert when all queue slots are occupied.
 // API handlers should map this to 503 Service Unavailable.
 var ErrQueueFull = errors.New("conversion queue is full")
+
+// instance is the interface Pool requires from a Chromium instance.
+// *Instance satisfies it; tests can substitute a fake.
+type instance interface {
+	Convert(ctx context.Context, job *Job) ([]byte, error)
+	NeedsRestart() bool
+	Close() error
+}
 
 // Job holds the input and options for a single HTML→PDF conversion.
 type Job struct {
@@ -46,16 +55,17 @@ type PDFOptions struct {
 
 // Pool manages a fixed set of Chromium instances and queues conversion jobs.
 type Pool struct {
-	cfg    PoolConfig
-	slots  []*slot
-	queue  chan *pendingJob
-	mu     sync.Mutex
-	logger *slog.Logger
+	cfg         PoolConfig
+	slots       []*slot
+	queue       chan *pendingJob
+	mu          sync.Mutex
+	logger      *slog.Logger
+	newInstance func(ctx context.Context, port int) (instance, error)
 }
 
 type slot struct {
 	index int
-	inst  *Instance
+	inst  instance
 }
 
 type pendingJob struct {
@@ -75,18 +85,28 @@ type PoolConfig struct {
 	Size           int
 	BasePort       int
 	MaxConversions int
+	// QueueDepth sets the pending-job buffer size. 0 means auto (Size*4).
+	QueueDepth int
 }
 
 // NewPool creates and starts a pool of Chromium instances.
 func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, error) {
+	qd := cfg.QueueDepth
+	if qd <= 0 {
+		qd = cfg.Size * 4
+	}
+
 	p := &Pool{
 		cfg:    cfg,
-		queue:  make(chan *pendingJob, cfg.Size*4),
+		queue:  make(chan *pendingJob, qd),
 		logger: logger,
+	}
+	p.newInstance = func(ctx context.Context, port int) (instance, error) {
+		return NewInstance(ctx, cfg.BinPath, port, cfg.MaxConversions, logger)
 	}
 
 	for i := range cfg.Size {
-		inst, err := NewInstance(ctx, cfg.BinPath, cfg.BasePort+i, cfg.MaxConversions, logger)
+		inst, err := p.newInstance(ctx, cfg.BasePort+i)
 		if err != nil {
 			p.Close()
 			return nil, fmt.Errorf("init pool instance %d: %w", i, err)
@@ -163,13 +183,10 @@ func (p *Pool) restart(s *slot) error {
 		p.logger.Warn("kill old instance during restart", "err", err)
 	}
 
-	inst, err := NewInstance(
-		context.Background(),
-		p.cfg.BinPath,
-		p.cfg.BasePort+s.index,
-		p.cfg.MaxConversions,
-		p.logger,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	inst, err := p.newInstance(ctx, p.cfg.BasePort+s.index)
 	if err != nil {
 		return fmt.Errorf("restart instance at port %d: %w", p.cfg.BasePort+s.index, err)
 	}

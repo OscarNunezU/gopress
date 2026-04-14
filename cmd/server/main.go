@@ -56,6 +56,7 @@ func main() {
 		Size:           cfg.poolSize,
 		BasePort:       9222,
 		MaxConversions: cfg.maxConversions,
+		QueueDepth:     cfg.queueDepth,
 	}, logger)
 	if err != nil {
 		logger.Error("init browser pool", "err", err)
@@ -100,6 +101,7 @@ type config struct {
 	chromeBin      string
 	poolSize       int
 	maxConversions int
+	queueDepth     int
 	otlpEndpoint   string
 }
 
@@ -109,6 +111,7 @@ func loadConfig() config {
 		chromeBin:      envStr("CHROME_BIN_PATH", "/usr/bin/chrome"),
 		poolSize:       envInt("GOPRESS_POOL_SIZE", 4),
 		maxConversions: envInt("GOPRESS_MAX_CONVERSIONS", 100),
+		queueDepth:     envInt("GOPRESS_QUEUE_DEPTH", 0),
 		otlpEndpoint:   envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 	}
 }

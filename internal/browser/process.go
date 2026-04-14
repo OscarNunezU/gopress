@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+const (
+	waitBackoffInit = 10 * time.Millisecond
+	waitBackoffMax  = 200 * time.Millisecond
+	waitBackoffMult = 2
+)
+
 // chromeFlags are the flags required for headless PDF generation.
 var chromeFlags = []string{
 	"--headless=new",
@@ -78,21 +84,25 @@ func (p *Process) Kill() error {
 
 // waitReady polls the /json/version endpoint until Chromium is accepting
 // connections or the context is cancelled.
+// It uses exponential backoff (10ms→200ms) to avoid spinning during startup.
 func (p *Process) waitReady(ctx context.Context) error {
 	url := fmt.Sprintf("http://localhost:%d/json/version", p.port)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	delay := waitBackoffInit
 
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("chromium port %d not ready: %w", p.port, ctx.Err())
-		case <-ticker.C:
+		case <-time.After(delay):
 			resp, err := http.Get(url) //nolint:noctx
 			if err == nil {
 				resp.Body.Close()
 				p.logger.Debug("chromium ready", "port", p.port)
 				return nil
+			}
+			delay *= waitBackoffMult
+			if delay > waitBackoffMax {
+				delay = waitBackoffMax
 			}
 		}
 	}

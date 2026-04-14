@@ -3,6 +3,7 @@ package converter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,9 +48,8 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 	pdf, err := c.pool.Convert(ctx, job)
 	duration := time.Since(start).Seconds()
 
-	status := "ok"
+	status := conversionStatus(err)
 	if err != nil {
-		status = "error"
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 	}
@@ -63,4 +63,23 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 
 	span.SetAttributes(attribute.Int("pdf.size_bytes", len(pdf)))
 	return pdf, nil
+}
+
+// conversionStatus maps an error to a metric label.
+//
+//   - "ok"           — no error
+//   - "queue_full"   — pool queue was at capacity (ErrQueueFull)
+//   - "timeout"      — request context exceeded its deadline
+//   - "chrome_error" — any other Chrome/CDP failure
+func conversionStatus(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if errors.Is(err, browser.ErrQueueFull) {
+		return "queue_full"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return "timeout"
+	}
+	return "chrome_error"
 }

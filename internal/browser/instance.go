@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -235,7 +236,11 @@ func (i *Instance) convertWithAssets(ctx context.Context, session *cdp.Session, 
 		w.Write(data) //nolint:errcheck
 	})
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
 	go srv.Serve(ln) //nolint:errcheck
 	defer srv.Close()
 

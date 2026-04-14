@@ -208,6 +208,8 @@ func (p *Pool) worker(s *slot) {
 			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index, "reason", reason)
 			if err := p.restart(s); err != nil {
 				p.logger.Error("instance restart failed", "err", err, "port", p.cfg.BasePort+s.index)
+				// The slot is dead; correct the gauge so it doesn't appear free.
+				telemetry.PoolFreeInstances.Dec()
 			}
 		}
 	}

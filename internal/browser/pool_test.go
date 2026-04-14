@@ -184,6 +184,55 @@ func TestPoolRestartAfterMaxConversions(t *testing.T) {
 	}
 }
 
+func TestPoolDrain(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+
+	fi := &fakeInstance{
+		convertFn: func(ctx context.Context, job *Job) ([]byte, error) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+			return []byte("%PDF"), nil
+		},
+	}
+
+	p := newTestPool(t, 1, []*fakeInstance{fi})
+
+	// Start a long-running conversion in the background.
+	go p.Convert(context.Background(), &Job{HTML: "<p>drain</p>"}) //nolint:errcheck
+	<-started                                                       // worker is now busy
+
+	// Launch Drain — it must block until the in-flight conversion finishes.
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		drainCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		p.Drain(drainCtx)
+	}()
+
+	// Drain must NOT return while the worker is still running.
+	select {
+	case <-drained:
+		t.Fatal("Drain returned before in-flight conversion finished")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Release the worker; Drain must complete promptly.
+	close(release)
+	select {
+	case <-drained:
+		// pass
+	case <-time.After(2 * time.Second):
+		t.Fatal("Drain did not complete after conversion finished")
+	}
+
+	p.Close()
+}
+
 func TestPoolCloseIdempotent(t *testing.T) {
 	p := newTestPool(t, 1, []*fakeInstance{{}})
 

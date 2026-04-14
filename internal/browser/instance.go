@@ -220,7 +220,7 @@ func (i *Instance) openSession(ctx context.Context) (*cdp.Session, string, error
 
 // convertWithAssets starts a temporary HTTP server, subscribes to lifecycle events
 // BEFORE navigating, then waits for network idle.
-func (i *Instance) convertWithAssets(ctx context.Context, session *cdp.Session, job *Job) error {
+func (i *Instance) convertWithAssets(ctx context.Context, session cdp.Sender, job *Job) error {
 	files := make(map[string][]byte, len(job.Assets)+1)
 	files["index.html"] = []byte(job.HTML)
 	for name, data := range job.Assets {

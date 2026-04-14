@@ -1,6 +1,7 @@
 # Binary
 gopress
 gopress.exe
+*.exe~
 
 # Build artifacts
 dist/

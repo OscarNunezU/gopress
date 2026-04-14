@@ -1,4 +1,12 @@
 BINARY          = gopress
+
+# The race detector requires CGO, which is unavailable on Windows without gcc.
+# Set RACE_FLAG automatically so `make test` works on all platforms.
+ifeq ($(OS),Windows_NT)
+    RACE_FLAG :=
+else
+    RACE_FLAG := -race
+endif
 VERSION        ?= dev
 GO_VERSION     ?= 1.26.2
 CHROME_VERSION ?= 147.0.7727.56
@@ -22,12 +30,12 @@ run: build ## Build and run locally (set CHROME_BIN_PATH to your local Chrome)
 	CHROME_BIN_PATH=$${CHROME_BIN_PATH:-/usr/bin/google-chrome} ./$(BINARY)
 
 .PHONY: test
-test: ## Run unit tests with race detector
-	go test -race ./...
+test: ## Run unit tests (race detector on Linux/macOS; disabled on Windows — no CGO)
+	go test $(RACE_FLAG) ./...
 
 .PHONY: coverage
 coverage: ## Run tests and open HTML coverage report
-	go test -race -coverprofile=coverage.out ./...
+	go test $(RACE_FLAG) -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
 .PHONY: chrome-checksum

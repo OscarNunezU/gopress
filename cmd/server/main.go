@@ -82,6 +82,11 @@ func main() {
 	go func() { srvErr <- srv.Start() }()
 
 	logger.Info("gopress started", "port", cfg.port, "pool_size", cfg.poolSize)
+	if cfg.apiKey != "" {
+		logger.Info("API key authentication enabled")
+	} else {
+		logger.Warn("API key authentication disabled — POST /pdf is open to all callers")
+	}
 
 	select {
 	case err := <-srvErr:

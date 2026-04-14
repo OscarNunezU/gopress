@@ -45,6 +45,52 @@ func TestRequestIDMiddleware(t *testing.T) {
 	})
 }
 
+func TestRateLimitMiddleware(t *testing.T) {
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("disabled_when_rps_zero", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodPost, "/pdf", nil)
+		w := httptest.NewRecorder()
+		rateLimitMiddleware(0, 1, okHandler).ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
+
+	t.Run("allows_within_burst", func(t *testing.T) {
+		h := rateLimitMiddleware(100, 3, okHandler)
+		for i := range 3 {
+			r := httptest.NewRequest(http.MethodPost, "/pdf", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusOK {
+				t.Errorf("request %d: status = %d, want %d", i, w.Code, http.StatusOK)
+			}
+		}
+	})
+
+	t.Run("rejects_when_burst_exceeded", func(t *testing.T) {
+		// burst=1, rps=0.001 — second request is always rejected immediately
+		h := rateLimitMiddleware(0.001, 1, okHandler)
+
+		r1 := httptest.NewRequest(http.MethodPost, "/pdf", nil)
+		w1 := httptest.NewRecorder()
+		h.ServeHTTP(w1, r1) // consumes the single token
+
+		r2 := httptest.NewRequest(http.MethodPost, "/pdf", nil)
+		w2 := httptest.NewRecorder()
+		h.ServeHTTP(w2, r2)
+		if w2.Code != http.StatusTooManyRequests {
+			t.Errorf("status = %d, want %d", w2.Code, http.StatusTooManyRequests)
+		}
+		if got := w2.Header().Get("Retry-After"); got != "1" {
+			t.Errorf("Retry-After = %q, want %q", got, "1")
+		}
+	})
+}
+
 func TestAPIKeyMiddleware(t *testing.T) {
 	const key = "test-secret-key"
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

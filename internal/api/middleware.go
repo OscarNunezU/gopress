@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
+
+	"golang.org/x/time/rate"
 )
 
 type contextKey int
@@ -36,6 +38,26 @@ func requestIDFromContext(ctx context.Context) string {
 		return id
 	}
 	return ""
+}
+
+// rateLimitMiddleware rejects excess requests with 429 Too Many Requests and a
+// Retry-After: 1 header. When rps ≤ 0, the middleware is a no-op.
+func rateLimitMiddleware(rps float64, burst int, next http.Handler) http.Handler {
+	if rps <= 0 {
+		return next
+	}
+	if burst <= 0 {
+		burst = 1
+	}
+	lim := rate.NewLimiter(rate.Limit(rps), burst)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !lim.Allow() {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // apiKeyMiddleware rejects requests that do not carry a valid Bearer token.

@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync/atomic"
@@ -242,6 +243,100 @@ func TestPoolCloseIdempotent(t *testing.T) {
 	// Should not panic on double close.
 	p.Close()
 	p.Close()
+}
+
+func TestPoolWorkerRestartBackoff(t *testing.T) {
+	t.Run("retries_after_backoff_and_recovers", func(t *testing.T) {
+		// newInstance fails twice, succeeds on the third attempt.
+		// The worker only retries restart when it processes a new job, so we
+		// submit 3 jobs sequentially to drive 3 restart attempts.
+		attempts := 0
+		recovered := make(chan struct{}, 1)
+
+		fi := &fakeInstance{
+			convertFn: func(ctx context.Context, job *Job) ([]byte, error) {
+				return []byte("%PDF"), nil
+			},
+		}
+		fi.needsRestart.Store(true)
+
+		cfg := PoolConfig{Size: 1, QueueDepth: 4}
+		p := &Pool{
+			cfg:         cfg,
+			queue:       make(chan *pendingJob, cfg.QueueDepth),
+			done:        make(chan struct{}),
+			logger:      noopLogger(t),
+			backoffUnit: time.Millisecond, // fast backoff for tests
+		}
+		p.newInstance = func(ctx context.Context, port int) (instance, error) {
+			attempts++
+			if attempts < 3 {
+				return nil, fmt.Errorf("transient startup error")
+			}
+			select {
+			case recovered <- struct{}{}:
+			default:
+			}
+			return &fakeInstance{}, nil
+		}
+		s := &slot{index: 0, inst: fi}
+		p.slots = append(p.slots, s)
+		go p.worker(s)
+		defer p.Close()
+
+		// Each Convert waits for the result, so jobs arrive sequentially.
+		// Job N+1 is queued while the worker sleeps its backoff for job N.
+		for range 3 {
+			p.Convert(context.Background(), &Job{HTML: "<p>x</p>"}) //nolint:errcheck
+		}
+
+		select {
+		case <-recovered:
+			// pass: slot recovered after two transient failures
+		case <-time.After(2 * time.Second):
+			t.Fatal("pool did not recover after backoff within 2s")
+		}
+	})
+
+	t.Run("exits_during_backoff_on_close", func(t *testing.T) {
+		fi := &fakeInstance{
+			convertFn: func(ctx context.Context, job *Job) ([]byte, error) {
+				return []byte("%PDF"), nil
+			},
+		}
+		fi.needsRestart.Store(true)
+
+		cfg := PoolConfig{Size: 1, QueueDepth: 4}
+		p := &Pool{
+			cfg:         cfg,
+			queue:       make(chan *pendingJob, cfg.QueueDepth),
+			done:        make(chan struct{}),
+			logger:      noopLogger(t),
+			backoffUnit: time.Hour, // enormous — worker must not sleep through it
+		}
+		p.newInstance = func(ctx context.Context, port int) (instance, error) {
+			return nil, fmt.Errorf("always fails")
+		}
+		s := &slot{index: 0, inst: fi}
+		p.slots = append(p.slots, s)
+		go p.worker(s)
+
+		p.Convert(context.Background(), &Job{HTML: "<p>x</p>"}) //nolint:errcheck
+
+		// Worker is now sleeping in a 1-hour backoff. Close must wake it via p.done.
+		closeDone := make(chan struct{})
+		go func() {
+			defer close(closeDone)
+			p.Close()
+		}()
+
+		select {
+		case <-closeDone:
+			// pass: Close() returned promptly
+		case <-time.After(2 * time.Second):
+			t.Fatal("pool.Close() did not return promptly during backoff sleep")
+		}
+	})
 }
 
 // noopLogger returns a discard slog.Logger for tests.

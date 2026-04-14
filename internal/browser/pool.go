@@ -65,6 +65,7 @@ type Pool struct {
 	closeOnce   sync.Once      // ensures Close is idempotent
 	wg          sync.WaitGroup // tracks in-flight conversions for Drain
 	shutdown    atomic.Bool    // set during Close to stop restart attempts
+	backoffUnit time.Duration  // unit for restart backoff (default: time.Second; tests use time.Millisecond)
 	logger      *slog.Logger
 	newInstance func(ctx context.Context, port int) (instance, error)
 }
@@ -219,13 +220,19 @@ func (p *Pool) worker(s *slot) {
 				// Slot is dead — correct the gauge so it doesn't appear free.
 				telemetry.PoolFreeInstances.Dec()
 
-				// Exponential backoff: 1s, 2s, 4s … capped at 30s.
+				// Exponential backoff: 1×unit, 2×unit, 4×unit … capped at 30×unit.
 				// Prevents a tight loop of failed restarts from burning CPU and
 				// flooding logs when Chrome can't start (OOM, binary missing, etc.).
+				// backoffUnit defaults to time.Second; tests override it to
+				// time.Millisecond so the backoff path executes in microseconds.
 				consecutiveFails++
-				backoff := time.Duration(1<<uint(consecutiveFails-1)) * time.Second
-				if backoff > 30*time.Second {
-					backoff = 30 * time.Second
+				unit := p.backoffUnit
+				if unit <= 0 {
+					unit = time.Second
+				}
+				backoff := time.Duration(1<<uint(consecutiveFails-1)) * unit
+				if backoff > 30*unit {
+					backoff = 30 * unit
 				}
 				p.logger.Warn("backing off before restart retry",
 					"backoff", backoff,

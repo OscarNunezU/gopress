@@ -99,7 +99,10 @@ func (p *Process) waitReady(ctx context.Context) error {
 		case <-ctx.Done():
 			return fmt.Errorf("chromium port %d not ready: %w", p.port, ctx.Err())
 		case <-t.C:
-			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if err != nil {
+				return fmt.Errorf("build readiness request: %w", err)
+			}
 			resp, err := http.DefaultClient.Do(req)
 			if err == nil {
 				resp.Body.Close()

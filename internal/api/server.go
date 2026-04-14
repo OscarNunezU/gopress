@@ -27,6 +27,11 @@ type Config struct {
 	// APIKey, if non-empty, gates POST /pdf behind Bearer token authentication.
 	// Leave empty to disable auth for internal/dev deployments.
 	APIKey string
+	// RateLimit sets the maximum steady-state requests/second for POST /pdf.
+	// 0 disables rate limiting.
+	RateLimit float64
+	// RateBurst is the token-bucket burst size. Defaults to 1 when RateLimit > 0.
+	RateBurst int
 }
 
 // converterIface allows injecting the converter without a circular import.
@@ -39,7 +44,7 @@ func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 
 	s := &Server{logger: logger}
-	convertH := requestIDMiddleware(apiKeyMiddleware(cfg.APIKey, convertHandler(converter, logger)))
+	convertH := requestIDMiddleware(rateLimitMiddleware(cfg.RateLimit, cfg.RateBurst, apiKeyMiddleware(cfg.APIKey, convertHandler(converter, logger))))
 	mux.Handle("POST /pdf", convertH)
 	mux.Handle("GET /health", healthHandler())
 	mux.Handle("GET /version", versionHandler())

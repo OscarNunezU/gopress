@@ -75,6 +75,8 @@ func main() {
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
 		APIKey:       cfg.apiKey,
+		RateLimit:    cfg.rateLimit,
+		RateBurst:    cfg.rateBurst,
 	}, conv, logger)
 
 	// Start server in background, block until signal.
@@ -121,6 +123,8 @@ type config struct {
 	queueDepth     int
 	otlpEndpoint   string
 	apiKey         string
+	rateLimit      float64
+	rateBurst      int
 }
 
 func loadConfig() config {
@@ -132,6 +136,8 @@ func loadConfig() config {
 		queueDepth:     envInt("GOPRESS_QUEUE_DEPTH", 0),
 		otlpEndpoint:   envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		apiKey:         envStr("GOPRESS_API_KEY", ""),
+		rateLimit:      envFloat("GOPRESS_RATE_LIMIT", 0),
+		rateBurst:      envInt("GOPRESS_RATE_BURST", 0),
 	}
 }
 
@@ -151,6 +157,15 @@ func envInt(key string, fallback int) int {
 	return fallback
 }
 
+func envFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return fallback
+}
+
 func validateConfig(cfg config) error {
 	if cfg.poolSize <= 0 {
 		return fmt.Errorf("GOPRESS_POOL_SIZE must be > 0, got %d", cfg.poolSize)
@@ -163,6 +178,9 @@ func validateConfig(cfg config) error {
 	}
 	if cfg.chromeBin == "" {
 		return fmt.Errorf("CHROME_BIN_PATH must not be empty")
+	}
+	if cfg.apiKey != "" && len(cfg.apiKey) < 16 {
+		return fmt.Errorf("GOPRESS_API_KEY must be at least 16 characters when set, got %d", len(cfg.apiKey))
 	}
 	return nil
 }

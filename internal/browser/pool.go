@@ -60,10 +60,11 @@ type Pool struct {
 	cfg         PoolConfig
 	slots       []*slot
 	queue       chan *pendingJob
+	done        chan struct{} // closed by Close(); lets workers exit backoff sleeps early
 	mu          sync.Mutex
-	closeOnce   sync.Once    // ensures Close is idempotent
+	closeOnce   sync.Once      // ensures Close is idempotent
 	wg          sync.WaitGroup // tracks in-flight conversions for Drain
-	shutdown    atomic.Bool  // set during Close to stop restart attempts
+	shutdown    atomic.Bool    // set during Close to stop restart attempts
 	logger      *slog.Logger
 	newInstance func(ctx context.Context, port int) (instance, error)
 }
@@ -104,6 +105,7 @@ func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, e
 	p := &Pool{
 		cfg:    cfg,
 		queue:  make(chan *pendingJob, qd),
+		done:   make(chan struct{}),
 		logger: logger,
 	}
 	p.newInstance = func(ctx context.Context, port int) (instance, error) {
@@ -177,6 +179,7 @@ func (p *Pool) Drain(ctx context.Context) {
 func (p *Pool) Close() {
 	p.shutdown.Store(true)
 	p.closeOnce.Do(func() {
+		close(p.done)  // wake any worker sleeping in restart backoff
 		close(p.queue)
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -189,6 +192,10 @@ func (p *Pool) Close() {
 }
 
 func (p *Pool) worker(s *slot) {
+	// consecutiveFails tracks back-to-back restart failures for this slot.
+	// It resets to 0 on any successful restart and drives the backoff duration.
+	consecutiveFails := 0
+
 	for pj := range p.queue {
 		telemetry.PoolQueueSize.Dec()
 		telemetry.PoolFreeInstances.Dec()
@@ -206,10 +213,32 @@ func (p *Pool) worker(s *slot) {
 			}
 			telemetry.PoolRestarts.WithLabelValues(reason).Inc()
 			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index, "reason", reason)
+
 			if err := p.restart(s); err != nil {
 				p.logger.Error("instance restart failed", "err", err, "port", p.cfg.BasePort+s.index)
-				// The slot is dead; correct the gauge so it doesn't appear free.
+				// Slot is dead — correct the gauge so it doesn't appear free.
 				telemetry.PoolFreeInstances.Dec()
+
+				// Exponential backoff: 1s, 2s, 4s … capped at 30s.
+				// Prevents a tight loop of failed restarts from burning CPU and
+				// flooding logs when Chrome can't start (OOM, binary missing, etc.).
+				consecutiveFails++
+				backoff := time.Duration(1<<uint(consecutiveFails-1)) * time.Second
+				if backoff > 30*time.Second {
+					backoff = 30 * time.Second
+				}
+				p.logger.Warn("backing off before restart retry",
+					"backoff", backoff,
+					"consecutive_fails", consecutiveFails,
+					"port", p.cfg.BasePort+s.index,
+				)
+				select {
+				case <-time.After(backoff):
+				case <-p.done:
+					return
+				}
+			} else {
+				consecutiveFails = 0
 			}
 		}
 	}

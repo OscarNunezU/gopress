@@ -36,6 +36,7 @@ func newTestPool(t *testing.T, size int, fakes []*fakeInstance) *Pool {
 	p := &Pool{
 		cfg:    cfg,
 		queue:  make(chan *pendingJob, cfg.QueueDepth),
+		done:   make(chan struct{}),
 		logger: noopLogger(t),
 	}
 	p.newInstance = func(ctx context.Context, port int) (instance, error) {
@@ -84,6 +85,7 @@ func TestPoolErrQueueFull(t *testing.T) {
 	p := &Pool{
 		cfg:    cfg,
 		queue:  make(chan *pendingJob, cfg.QueueDepth),
+		done:   make(chan struct{}),
 		logger: noopLogger(t),
 	}
 	p.newInstance = func(ctx context.Context, port int) (instance, error) {
@@ -160,6 +162,7 @@ func TestPoolRestartAfterMaxConversions(t *testing.T) {
 	p := &Pool{
 		cfg:    cfg,
 		queue:  make(chan *pendingJob, cfg.QueueDepth),
+		done:   make(chan struct{}),
 		logger: noopLogger(t),
 	}
 	p.newInstance = func(ctx context.Context, port int) (instance, error) {

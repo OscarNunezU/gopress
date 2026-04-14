@@ -173,7 +173,11 @@ func (i *Instance) Close() error {
 // dialBrowser dials the browser-level CDP WebSocket obtained from /json/version.
 // This connection is reused across all conversions in the lifetime of the Instance.
 func dialBrowser(ctx context.Context, port int, logger *slog.Logger) (*cdp.Client, error) {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/json/version", port)) //nolint:noctx
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/json/version", port), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build /json/version request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get /json/version: %w", err)
 	}

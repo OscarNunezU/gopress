@@ -85,16 +85,22 @@ func (p *Process) Kill() error {
 // waitReady polls the /json/version endpoint until Chromium is accepting
 // connections or the context is cancelled.
 // It uses exponential backoff (10ms→200ms) to avoid spinning during startup.
+// A single Timer is reused across iterations to avoid the GC-unsafe pattern
+// of creating a new time.After channel on every loop iteration.
 func (p *Process) waitReady(ctx context.Context) error {
 	url := fmt.Sprintf("http://localhost:%d/json/version", p.port)
 	delay := waitBackoffInit
+
+	t := time.NewTimer(delay)
+	defer t.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("chromium port %d not ready: %w", p.port, ctx.Err())
-		case <-time.After(delay):
-			resp, err := http.Get(url) //nolint:noctx
+		case <-t.C:
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			resp, err := http.DefaultClient.Do(req)
 			if err == nil {
 				resp.Body.Close()
 				p.logger.Debug("chromium ready", "port", p.port)
@@ -104,6 +110,7 @@ func (p *Process) waitReady(ctx context.Context) error {
 			if delay > waitBackoffMax {
 				delay = waitBackoffMax
 			}
+			t.Reset(delay)
 		}
 	}
 }

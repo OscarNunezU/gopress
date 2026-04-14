@@ -14,13 +14,20 @@ import (
 	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
 
+// poolIface is the subset of *browser.Pool used by Converter.
+// Declaring the interface here (not in the browser package) keeps the
+// dependency direction correct and makes the Converter unit-testable.
+type poolIface interface {
+	Convert(ctx context.Context, job *browser.Job) ([]byte, error)
+}
+
 // Converter converts HTML documents to PDF using a browser pool.
 type Converter struct {
-	pool *browser.Pool
+	pool poolIface
 }
 
 // New creates a Converter backed by the given pool.
-func New(pool *browser.Pool) *Converter {
+func New(pool poolIface) *Converter {
 	return &Converter{pool: pool}
 }
 

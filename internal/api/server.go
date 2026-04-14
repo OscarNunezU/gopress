@@ -24,6 +24,9 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+	// APIKey, if non-empty, gates POST /pdf behind Bearer token authentication.
+	// Leave empty to disable auth for internal/dev deployments.
+	APIKey string
 }
 
 // converterIface allows injecting the converter without a circular import.
@@ -36,7 +39,8 @@ func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 
 	s := &Server{logger: logger}
-	mux.Handle("POST /pdf", convertHandler(converter, logger))
+	convertH := requestIDMiddleware(apiKeyMiddleware(cfg.APIKey, convertHandler(converter, logger)))
+	mux.Handle("POST /pdf", convertH)
 	mux.Handle("GET /health", healthHandler())
 	mux.Handle("GET /version", versionHandler())
 	mux.Handle("GET /metrics", telemetry.Handler())

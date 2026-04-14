@@ -43,11 +43,16 @@ var (
 		Help: "Number of idle Chromium instances in the pool.",
 	})
 
-	// PoolRestarts counts Chromium instance restarts (max_conversions quota reached).
-	PoolRestarts = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "gopress_pool_restarts_total",
-		Help: "Total number of Chromium instance restarts.",
-	})
+	// PoolRestarts counts Chromium instance restarts, labelled by restart reason:
+	//   "max_conversions" — instance hit its conversion quota (planned)
+	//   "crash"           — Chrome process or CDP connection died unexpectedly
+	PoolRestarts = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "gopress_pool_restarts_total",
+			Help: "Total number of Chromium instance restarts.",
+		},
+		[]string{"reason"},
+	)
 )
 
 // Register registers all gopress metrics with the default Prometheus registry.

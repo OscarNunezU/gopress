@@ -74,6 +74,7 @@ func main() {
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
+		APIKey:       cfg.apiKey,
 	}, conv, logger)
 
 	// Start server in background, block until signal.
@@ -93,7 +94,14 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Stop accepting new requests first.
 	_ = srv.Shutdown(shutdownCtx)
+
+	// Let in-flight conversions finish before killing Chrome.
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer drainCancel()
+	pool.Drain(drainCtx)
+
 	pool.Close()
 	_ = shutdownTrace(shutdownCtx)
 
@@ -107,6 +115,7 @@ type config struct {
 	maxConversions int
 	queueDepth     int
 	otlpEndpoint   string
+	apiKey         string
 }
 
 func loadConfig() config {
@@ -117,6 +126,7 @@ func loadConfig() config {
 		maxConversions: envInt("GOPRESS_MAX_CONVERSIONS", 100),
 		queueDepth:     envInt("GOPRESS_QUEUE_DEPTH", 0),
 		otlpEndpoint:   envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		apiKey:         envStr("GOPRESS_API_KEY", ""),
 	}
 }
 

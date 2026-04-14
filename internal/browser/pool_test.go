@@ -25,7 +25,8 @@ func (f *fakeInstance) Convert(ctx context.Context, job *Job) ([]byte, error) {
 }
 
 func (f *fakeInstance) NeedsRestart() bool { return f.needsRestart.Load() }
-func (f *fakeInstance) Close() error        { f.closeCalled.Store(true); return nil }
+func (f *fakeInstance) HasCrashed() bool   { return false }
+func (f *fakeInstance) Close() error       { f.closeCalled.Store(true); return nil }
 
 // newTestPool builds a Pool backed by the given fakes (no Chrome process).
 func newTestPool(t *testing.T, size int, fakes []*fakeInstance) *Pool {
@@ -98,7 +99,9 @@ func TestPoolErrQueueFull(t *testing.T) {
 	<-started
 
 	// Worker is busy. Fill the 1-slot queue buffer directly (same package).
+	// wg.Add must mirror what Convert() does so the worker's wg.Done() doesn't underflow.
 	dummy := make(chan jobResult, 1)
+	p.wg.Add(1)
 	p.queue <- &pendingJob{ctx: context.Background(), job: &Job{HTML: "fill"}, result: dummy}
 
 	// Queue is now at capacity — next Convert must return ErrQueueFull immediately.

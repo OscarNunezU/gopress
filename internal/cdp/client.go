@@ -98,6 +98,18 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
+// IsClosed reports whether this client's connection has been closed — either
+// by an explicit Close() call or because the remote Chrome process dropped the
+// WebSocket connection unexpectedly.
+func (c *Client) IsClosed() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
+}
+
 // send is the shared implementation for both Client and Session commands.
 func (c *Client) send(ctx context.Context, sessionID, method string, params any, result any) error {
 	id := int(c.nextID.Add(1))

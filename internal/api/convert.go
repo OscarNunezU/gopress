@@ -49,7 +49,7 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 			case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 				http.Error(w, "conversion timeout", http.StatusGatewayTimeout)
 			default:
-				logger.Error("conversion failed", "err", err)
+				logger.Error("conversion failed", "err", err, "request_id", requestIDFromContext(r.Context()))
 				http.Error(w, "conversion failed", http.StatusInternalServerError)
 			}
 			return

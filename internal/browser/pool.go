@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/OscarNunezU/gopress/internal/telemetry"
@@ -20,6 +21,7 @@ var ErrQueueFull = errors.New("conversion queue is full")
 type instance interface {
 	Convert(ctx context.Context, job *Job) ([]byte, error)
 	NeedsRestart() bool
+	HasCrashed() bool
 	Close() error
 }
 
@@ -59,7 +61,9 @@ type Pool struct {
 	slots       []*slot
 	queue       chan *pendingJob
 	mu          sync.Mutex
-	closeOnce   sync.Once // ensures Close is idempotent
+	closeOnce   sync.Once    // ensures Close is idempotent
+	wg          sync.WaitGroup // tracks in-flight conversions for Drain
+	shutdown    atomic.Bool  // set during Close to stop restart attempts
 	logger      *slog.Logger
 	newInstance func(ctx context.Context, port int) (instance, error)
 }
@@ -130,12 +134,17 @@ func (p *Pool) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	result := make(chan jobResult, 1)
 	pj := &pendingJob{ctx: ctx, job: job, result: result}
 
+	// wg.Add must happen before the job enters the queue so Drain() cannot
+	// return before the worker has had a chance to call wg.Done().
+	p.wg.Add(1)
 	select {
 	case p.queue <- pj:
 		telemetry.PoolQueueSize.Inc()
 	case <-ctx.Done():
+		p.wg.Done()
 		return nil, ctx.Err()
 	default:
+		p.wg.Done()
 		return nil, ErrQueueFull
 	}
 
@@ -143,12 +152,30 @@ func (p *Pool) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	case r := <-result:
 		return r.pdf, r.err
 	case <-ctx.Done():
+		// The job is already queued; the worker will still process it and
+		// call wg.Done(). We return the context error to the caller now.
 		return nil, ctx.Err()
+	}
+}
+
+// Drain waits for all in-flight conversions to finish or ctx to expire.
+// Call this after srv.Shutdown() and before pool.Close() so no PDF bytes
+// are lost mid-write when Chrome is killed.
+func (p *Pool) Drain(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 
 // Close shuts down all Chromium instances. Safe to call multiple times.
 func (p *Pool) Close() {
+	p.shutdown.Store(true)
 	p.closeOnce.Do(func() {
 		close(p.queue)
 		p.mu.Lock()
@@ -168,12 +195,17 @@ func (p *Pool) worker(s *slot) {
 
 		pdf, err := s.inst.Convert(pj.ctx, pj.job)
 		pj.result <- jobResult{pdf: pdf, err: err}
+		p.wg.Done()
 
 		telemetry.PoolFreeInstances.Inc()
 
-		if s.inst.NeedsRestart() {
-			telemetry.PoolRestarts.Inc()
-			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index)
+		if s.inst.NeedsRestart() && !p.shutdown.Load() {
+			reason := "max_conversions"
+			if s.inst.HasCrashed() {
+				reason = "crash"
+			}
+			telemetry.PoolRestarts.WithLabelValues(reason).Inc()
+			p.logger.Info("restarting instance", "port", p.cfg.BasePort+s.index, "reason", reason)
 			if err := p.restart(s); err != nil {
 				p.logger.Error("instance restart failed", "err", err, "port", p.cfg.BasePort+s.index)
 			}

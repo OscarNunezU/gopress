@@ -150,9 +150,18 @@ func (i *Instance) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	return pdf, nil
 }
 
-// NeedsRestart reports whether the instance has exceeded its conversion quota.
+// NeedsRestart reports whether the instance should be replaced. This is true
+// when Chrome has crashed (detected via a closed CDP connection) or when the
+// conversion quota has been reached (planned memory-hygiene restart).
 func (i *Instance) NeedsRestart() bool {
-	return i.maxConversions > 0 && i.conversions >= i.maxConversions
+	return i.HasCrashed() || (i.maxConversions > 0 && i.conversions >= i.maxConversions)
+}
+
+// HasCrashed reports whether the underlying Chrome process or CDP connection
+// died unexpectedly. The pool uses this to distinguish a crash restart
+// ("crash") from a quota restart ("max_conversions") in metrics.
+func (i *Instance) HasCrashed() bool {
+	return i.client.IsClosed()
 }
 
 // Close kills the Chromium process and closes the persistent CDP connection.

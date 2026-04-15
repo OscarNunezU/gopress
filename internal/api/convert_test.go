@@ -215,6 +215,21 @@ func TestConvertHandlerTimeout(t *testing.T) {
 	}
 }
 
+func TestParseFormInvalidOptionsJSON(t *testing.T) {
+	body, ct := buildMultipart(t, map[string][]byte{
+		"index.html":   []byte("<html/>"),
+		"options.json": []byte("{not valid json}"),
+	})
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", ct)
+	_ = r.ParseMultipartForm(32 << 20)
+
+	_, _, _, err := parseForm(r)
+	if err == nil {
+		t.Fatal("expected error for invalid options.json, got nil")
+	}
+}
+
 func TestConvertHandlerInvalidMultipart(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", bytes.NewBufferString("not multipart"))
 	r.Header.Set("Content-Type", "multipart/form-data; boundary=missing")

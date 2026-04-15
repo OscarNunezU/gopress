@@ -394,6 +394,53 @@ func TestSessionSubscribeEvent(t *testing.T) {
 	}
 }
 
+// TestClientIsClosed verifies that IsClosed reports false before Close and true
+// after Close.
+func TestClientIsClosed(t *testing.T) {
+	c, _ := newTestClient(t)
+
+	if c.IsClosed() {
+		t.Fatal("IsClosed() = true before Close, want false")
+	}
+
+	c.Close()
+
+	if !c.IsClosed() {
+		t.Fatal("IsClosed() = false after Close, want true")
+	}
+}
+
+// TestWriteFrame64BitPath verifies that Send correctly uses the 64-bit extended
+// length field for payloads exceeding 65 535 bytes.
+func TestWriteFrame64BitPath(t *testing.T) {
+	c, server := newTestClient(t)
+
+	// Build a command whose JSON serialisation exceeds 65 535 bytes so writeFrame
+	// must use the 64-bit extended length (value 127 in the length octet).
+	largeParam := strings.Repeat("a", 66000)
+
+	go func() {
+		_, data, err := readFrame(server)
+		if err != nil {
+			return
+		}
+		var req Message
+		if err := json.Unmarshal(data, &req); err != nil {
+			return
+		}
+		resp := Message{ID: req.ID}
+		b, _ := json.Marshal(resp)
+		_ = writeServerFrame(server, b)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := c.Send(ctx, "Runtime.evaluate", map[string]any{"expression": largeParam}, nil); err != nil {
+		t.Fatalf("Send with 64-bit payload: %v", err)
+	}
+}
+
 // TestWriteFrameLargePath verifies that Send correctly uses the 16-bit extended
 // length field for payloads between 126 and 65 535 bytes.
 func TestWriteFrameLargePath(t *testing.T) {

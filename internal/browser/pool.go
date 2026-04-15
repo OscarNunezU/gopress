@@ -140,9 +140,19 @@ func (p *Pool) Convert(ctx context.Context, job *Job) ([]byte, error) {
 	// wg.Add must happen before the job enters the queue so Drain() cannot
 	// return before the worker has had a chance to call wg.Done().
 	p.wg.Add(1)
+	// Fast-path: reject immediately if the pool is already shutting down so we
+	// never attempt to send to a queue whose workers may have exited.
+	if p.shutdown.Load() {
+		p.wg.Done()
+		return nil, ErrQueueFull
+	}
 	select {
 	case p.queue <- pj:
 		telemetry.PoolQueueSize.Inc()
+	case <-p.done:
+		// Pool was closed between the shutdown check above and this select.
+		p.wg.Done()
+		return nil, ErrQueueFull
 	case <-ctx.Done():
 		p.wg.Done()
 		return nil, ctx.Err()
@@ -180,8 +190,12 @@ func (p *Pool) Drain(ctx context.Context) {
 func (p *Pool) Close() {
 	p.shutdown.Store(true)
 	p.closeOnce.Do(func() {
-		close(p.done)  // wake any worker sleeping in restart backoff
-		close(p.queue)
+		// Closing p.done signals both workers (exit their for-select) and any
+		// Convert() caller that is mid-select on the enqueue case. The queue
+		// itself is intentionally NOT closed here: closing a channel while a
+		// concurrent goroutine may be sending to it causes a panic. Workers
+		// exit via the p.done case in their for-select loop instead.
+		close(p.done)
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		for _, s := range p.slots {
@@ -197,7 +211,15 @@ func (p *Pool) worker(s *slot) {
 	// It resets to 0 on any successful restart and drives the backoff duration.
 	consecutiveFails := 0
 
-	for pj := range p.queue {
+	for {
+		// Block until a job arrives or the pool is closed.
+		var pj *pendingJob
+		select {
+		case pj = <-p.queue:
+		case <-p.done:
+			return
+		}
+
 		telemetry.PoolQueueSize.Dec()
 		telemetry.PoolFreeInstances.Dec()
 

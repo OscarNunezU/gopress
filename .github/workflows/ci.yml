@@ -42,11 +42,11 @@ jobs:
       - name: Test (race detector)
         run: go test -race -coverprofile=coverage.out ./...
 
-      - name: Enforce coverage threshold (≥40%)
+      - name: Enforce coverage threshold (≥50%)
         run: |
           pct=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
           echo "Total coverage: ${pct}%"
-          awk -v p="$pct" 'BEGIN { if (p+0 < 40) { print "Coverage " p "% is below the 40% threshold"; exit 1 } }'
+          awk -v p="$pct" 'BEGIN { if (p+0 < 50) { print "Coverage " p "% is below the 50% threshold"; exit 1 } }'
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/OscarNunezU/gopress/internal/browser"
 )
@@ -86,6 +88,9 @@ func parseForm(r *http.Request) (html string, assets map[string][]byte, opts bro
 				return "", nil, opts, jerr
 			}
 		default:
+			if err := validateAssetName(name); err != nil {
+				return "", nil, opts, err
+			}
 			assets[name] = data
 		}
 	}
@@ -94,4 +99,32 @@ func parseForm(r *http.Request) (html string, assets map[string][]byte, opts bro
 		return "", nil, opts, errMissingHTML
 	}
 	return html, assets, opts, nil
+}
+
+// validateAssetName rejects asset filenames that are empty, too long,
+// contain path traversal components, start with an absolute path separator,
+// or contain control characters.
+// Subdirectory paths like "images/logo.png" are allowed — the in-memory
+// asset server resolves them correctly.
+func validateAssetName(name string) error {
+	if name == "" {
+		return fmt.Errorf("asset name must not be empty")
+	}
+	if len(name) > 255 {
+		return fmt.Errorf("asset name too long: %q", name)
+	}
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "\\") {
+		return fmt.Errorf("asset name must not be an absolute path: %q", name)
+	}
+	for _, seg := range strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if seg == ".." {
+			return fmt.Errorf("asset name must not contain path traversal: %q", name)
+		}
+	}
+	for _, r := range name {
+		if r < 0x20 {
+			return fmt.Errorf("asset name contains invalid character: %q", name)
+		}
+	}
+	return nil
 }

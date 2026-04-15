@@ -230,6 +230,35 @@ func TestParseFormInvalidOptionsJSON(t *testing.T) {
 	}
 }
 
+func TestValidateAssetName(t *testing.T) {
+	valid := []string{
+		"style.css",
+		"logo.png",
+		"images/logo.png",
+		"fonts/Inter.woff2",
+	}
+	for _, name := range valid {
+		if err := validateAssetName(name); err != nil {
+			t.Errorf("validateAssetName(%q) = %v, want nil", name, err)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"../secret",
+		"a/../../etc/passwd",
+		"/etc/passwd",
+		"\\windows\\system32",
+		"bad\x00name",
+		string(make([]byte, 256)),
+	}
+	for _, name := range invalid {
+		if err := validateAssetName(name); err == nil {
+			t.Errorf("validateAssetName(%q) = nil, want error", name)
+		}
+	}
+}
+
 func TestConvertHandlerInvalidMultipart(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", bytes.NewBufferString("not multipart"))
 	r.Header.Set("Content-Type", "multipart/form-data; boundary=missing")

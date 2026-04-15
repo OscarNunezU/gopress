@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -217,5 +218,209 @@ func TestClientSendContextCancel(t *testing.T) {
 	err := c.Send(ctx, "Page.enable", nil, nil)
 	if err == nil {
 		t.Fatal("expected context error, got nil")
+	}
+}
+
+// TestReadFrame64BitLength exercises the 64-bit extended payload length path
+// (frames whose payload exceeds 65 535 bytes).
+func TestReadFrame64BitLength(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	payload := make([]byte, 65536) // triggers 64-bit length in writeServerFrame
+	for i := range payload {
+		payload[i] = 'y'
+	}
+	go func() { _ = writeServerFrame(serverConn, payload) }()
+
+	_, got, err := readFrame(clientConn)
+	if err != nil {
+		t.Fatalf("readFrame 64-bit: %v", err)
+	}
+	if len(got) != len(payload) {
+		t.Errorf("readFrame 64-bit len = %d, want %d", len(got), len(payload))
+	}
+}
+
+// TestReadFrameMaxSizeExceeded verifies that readFrame rejects a frame whose
+// declared length exceeds maxWSFrameSize without reading the payload.
+func TestReadFrameMaxSizeExceeded(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		// Write a frame header declaring a payload larger than maxWSFrameSize.
+		header := []byte{0x81, 127} // FIN=1 text, 64-bit extended length
+		ext := make([]byte, 8)
+		binary.BigEndian.PutUint64(ext, uint64(maxWSFrameSize)+1)
+		_, _ = serverConn.Write(header)
+		_, _ = serverConn.Write(ext)
+	}()
+
+	_, _, err := readFrame(clientConn)
+	if err == nil {
+		t.Fatal("expected error for oversized frame, got nil")
+	}
+}
+
+// TestReadLoopHandlesPing verifies that the readLoop responds to a WebSocket
+// ping frame (opcode 0x9) with a pong frame (opcode 0xA).
+func TestReadLoopHandlesPing(t *testing.T) {
+	c, server := newTestClient(t)
+	_ = c
+
+	pongReceived := make(chan struct{})
+	go func() {
+		// Write a ping frame (server → client): FIN=1, opcode=9, length=0.
+		ping := []byte{0x89, 0x00}
+		if _, err := server.Write(ping); err != nil {
+			return
+		}
+		// Read the masked pong that the readLoop sends back.
+		buf := make([]byte, 16)
+		n, err := server.Read(buf)
+		if err != nil || n < 2 {
+			return
+		}
+		if buf[0] == 0x8A { // FIN=1, opcode=0xA (pong)
+			close(pongReceived)
+		}
+	}()
+
+	select {
+	case <-pongReceived:
+		// pass
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for pong response to ping")
+	}
+}
+
+// TestReadLoopIgnoresPong verifies that a pong frame (opcode 0xA) is silently
+// discarded and the readLoop continues processing subsequent messages.
+func TestReadLoopIgnoresPong(t *testing.T) {
+	c, server := newTestClient(t)
+	ch := c.Subscribe("Page.loadEventFired")
+
+	go func() {
+		// Send a pong frame first (server → client): FIN=1, opcode=10, length=0.
+		pong := []byte{0x8A, 0x00}
+		_, _ = server.Write(pong)
+		// Then send a real event.
+		evt := Message{Method: "Page.loadEventFired"}
+		b, _ := json.Marshal(evt)
+		_ = writeServerFrame(server, b)
+	}()
+
+	select {
+	case e := <-ch:
+		if e.Method != "Page.loadEventFired" {
+			t.Errorf("event method = %q, want Page.loadEventFired", e.Method)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for event after pong frame")
+	}
+}
+
+// TestReadLoopIgnoresInvalidJSON verifies that an unparseable frame is logged
+// and discarded — the readLoop does not exit.
+func TestReadLoopIgnoresInvalidJSON(t *testing.T) {
+	c, server := newTestClient(t)
+	ch := c.Subscribe("Page.loadEventFired")
+
+	go func() {
+		// First frame: invalid JSON.
+		_ = writeServerFrame(server, []byte("{not valid json}"))
+		// Second frame: well-formed event.
+		evt := Message{Method: "Page.loadEventFired"}
+		b, _ := json.Marshal(evt)
+		_ = writeServerFrame(server, b)
+	}()
+
+	select {
+	case <-ch:
+		// pass: readLoop recovered from invalid JSON
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout — readLoop did not recover from invalid JSON frame")
+	}
+}
+
+// TestReadLoopSkipsEmptyMethod verifies that a message with no method and no ID
+// (neither an event nor a response) is silently skipped.
+func TestReadLoopSkipsEmptyMethod(t *testing.T) {
+	c, server := newTestClient(t)
+	ch := c.Subscribe("Page.loadEventFired")
+
+	go func() {
+		// Message with params but no method and no ID.
+		_ = writeServerFrame(server, []byte(`{"params":{}}`))
+		// Real event follows.
+		evt := Message{Method: "Page.loadEventFired"}
+		b, _ := json.Marshal(evt)
+		_ = writeServerFrame(server, b)
+	}()
+
+	select {
+	case <-ch:
+		// pass
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout — readLoop did not skip empty-method message")
+	}
+}
+
+// TestSessionSubscribeEvent verifies that session-scoped events (those with a
+// non-empty SessionID) are routed to the correct session's Subscribe channel.
+func TestSessionSubscribeEvent(t *testing.T) {
+	c, server := newTestClient(t)
+
+	const sessionID = "session-abc"
+	sess := c.NewSession(sessionID)
+	ch := sess.Subscribe("Page.loadEventFired")
+
+	go func() {
+		evt := Message{Method: "Page.loadEventFired", SessionID: sessionID}
+		b, _ := json.Marshal(evt)
+		_ = writeServerFrame(server, b)
+	}()
+
+	select {
+	case e := <-ch:
+		if e.Method != "Page.loadEventFired" {
+			t.Errorf("event method = %q, want Page.loadEventFired", e.Method)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for session-scoped event")
+	}
+}
+
+// TestWriteFrameLargePath verifies that Send correctly uses the 16-bit extended
+// length field for payloads between 126 and 65 535 bytes.
+func TestWriteFrameLargePath(t *testing.T) {
+	c, server := newTestClient(t)
+
+	// Build a command whose JSON serialisation exceeds 125 bytes so writeFrame
+	// must use the 16-bit extended length (value 126 in the length octet).
+	largeParam := strings.Repeat("a", 200)
+
+	go func() {
+		_, data, err := readFrame(server)
+		if err != nil {
+			return
+		}
+		var req Message
+		if err := json.Unmarshal(data, &req); err != nil {
+			return
+		}
+		resp := Message{ID: req.ID}
+		b, _ := json.Marshal(resp)
+		_ = writeServerFrame(server, b)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := c.Send(ctx, "Runtime.evaluate", map[string]any{"expression": largeParam}, nil); err != nil {
+		t.Fatalf("Send with large payload: %v", err)
 	}
 }

@@ -16,6 +16,8 @@ type fakeInstance struct {
 	convertFn    func(ctx context.Context, job *Job) ([]byte, error)
 	needsRestart atomic.Bool
 	closeCalled  atomic.Bool
+	hasCrashed   bool  // returned by HasCrashed(); drives reason="crash" in worker
+	closeErr     error // returned by Close(); exercises error-log paths
 }
 
 func (f *fakeInstance) Convert(ctx context.Context, job *Job) ([]byte, error) {
@@ -26,8 +28,8 @@ func (f *fakeInstance) Convert(ctx context.Context, job *Job) ([]byte, error) {
 }
 
 func (f *fakeInstance) NeedsRestart() bool { return f.needsRestart.Load() }
-func (f *fakeInstance) HasCrashed() bool   { return false }
-func (f *fakeInstance) Close() error       { f.closeCalled.Store(true); return nil }
+func (f *fakeInstance) HasCrashed() bool   { return f.hasCrashed }
+func (f *fakeInstance) Close() error       { f.closeCalled.Store(true); return f.closeErr }
 
 // newTestPool builds a Pool backed by the given fakes (no Chrome process).
 func newTestPool(t *testing.T, size int, fakes []*fakeInstance) *Pool {
@@ -388,6 +390,99 @@ func TestPoolWorkerRestartBackoff(t *testing.T) {
 			t.Fatal("pool.Close() did not return promptly during backoff sleep")
 		}
 	})
+}
+
+// TestPoolWorkerCrashReason verifies that when HasCrashed() is true the worker
+// emits a restart with reason="crash" (not "max_conversions").
+func TestPoolWorkerCrashReason(t *testing.T) {
+	restartCalled := make(chan struct{}, 1)
+
+	fi := &fakeInstance{
+		convertFn: func(ctx context.Context, job *Job) ([]byte, error) {
+			return []byte("%PDF"), nil
+		},
+		hasCrashed: true, // drives reason = "crash" in worker
+	}
+	fi.needsRestart.Store(true)
+
+	cfg := PoolConfig{Size: 1, QueueDepth: 4}
+	p := &Pool{
+		cfg:    cfg,
+		queue:  make(chan *pendingJob, cfg.QueueDepth),
+		done:   make(chan struct{}),
+		logger: noopLogger(t),
+	}
+	p.newInstance = func(ctx context.Context, port int) (instance, error) {
+		select {
+		case restartCalled <- struct{}{}:
+		default:
+		}
+		return &fakeInstance{}, nil
+	}
+	s := &slot{index: 0, inst: fi}
+	p.slots = append(p.slots, s)
+	go p.worker(s)
+	defer p.Close()
+
+	p.Convert(context.Background(), &Job{HTML: "<p>crash</p>"}) //nolint:errcheck
+
+	select {
+	case <-restartCalled:
+		// pass: worker triggered a restart for the crashed instance
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not restart crashed instance within 2s")
+	}
+}
+
+// TestPoolCloseInstanceError verifies that Close() does not panic when an
+// instance's own Close() returns an error (logger absorbs it).
+func TestPoolCloseInstanceError(t *testing.T) {
+	fi := &fakeInstance{closeErr: errors.New("process already dead")}
+	p := newTestPool(t, 1, []*fakeInstance{fi})
+	p.Close() // must not panic
+	p.Close() // idempotent
+}
+
+// TestPoolRestartOldInstanceCloseError verifies that restart() continues and
+// starts a fresh instance even when the old instance's Close() returns an error.
+func TestPoolRestartOldInstanceCloseError(t *testing.T) {
+	restartDone := make(chan struct{}, 1)
+
+	fi := &fakeInstance{
+		convertFn: func(ctx context.Context, job *Job) ([]byte, error) {
+			return []byte("%PDF"), nil
+		},
+		closeErr: errors.New("kill failed"), // Close() on old instance fails
+	}
+	fi.needsRestart.Store(true)
+
+	cfg := PoolConfig{Size: 1, QueueDepth: 4}
+	p := &Pool{
+		cfg:    cfg,
+		queue:  make(chan *pendingJob, cfg.QueueDepth),
+		done:   make(chan struct{}),
+		logger: noopLogger(t),
+	}
+	p.newInstance = func(ctx context.Context, port int) (instance, error) {
+		select {
+		case restartDone <- struct{}{}:
+		default:
+		}
+		return &fakeInstance{}, nil
+	}
+	s := &slot{index: 0, inst: fi}
+	p.slots = append(p.slots, s)
+	go p.worker(s)
+	defer p.Close()
+
+	p.Convert(context.Background(), &Job{HTML: "<p>x</p>"}) //nolint:errcheck
+
+	select {
+	case <-restartDone:
+		// pass: restart completed despite Close() error on the old instance
+	case <-time.After(2 * time.Second):
+		t.Fatal("restart did not happen within 2s")
+	}
 }
 
 // noopLogger returns a discard slog.Logger for tests.

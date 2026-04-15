@@ -110,6 +110,18 @@ func TestRateLimitMiddleware(t *testing.T) {
 	})
 }
 
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	securityHeadersMiddleware(inner).ServeHTTP(w, r)
+	if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+	}
+}
+
 func TestAPIKeyMiddleware(t *testing.T) {
 	const key = "test-secret-key"
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

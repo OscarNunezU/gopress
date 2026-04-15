@@ -88,6 +88,31 @@ fmt: ## Format code and tidy dependencies
 	go fmt ./...
 	go mod tidy
 
+## Benchmark targets — require a running gopress instance (make run / make docker-run)
+VUS      ?= 4
+DURATION ?= 30s
+DOC      ?= simple
+
+.PHONY: bench
+bench: ## HTML→PDF load benchmark: simple doc, 4 VUs, 30s (set VUS= DURATION= DOC=)
+	go run ./bench -vus=$(VUS) -duration=$(DURATION) -doc=$(DOC)
+
+.PHONY: bench-all
+bench-all: ## Run benchmark for both simple and complex documents
+	go run ./bench -vus=$(VUS) -duration=$(DURATION) -all
+
+.PHONY: bench-compare
+bench-compare: ## Side-by-side: gopress vs Gotenberg (requires Gotenberg on localhost:3010)
+	@echo ""
+	@echo "═══ gopress ═══════════════════════════════════════════"
+	go run ./bench -vus=$(VUS) -duration=$(DURATION) -all
+	@echo "═══ Gotenberg ══════════════════════════════════════════"
+	go run ./bench \
+		-target=http://localhost:3010 \
+		-endpoint=/forms/chromium/convert/html \
+		-field=files \
+		-vus=$(VUS) -duration=$(DURATION) -all
+
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -f $(BINARY) coverage.out coverage.html

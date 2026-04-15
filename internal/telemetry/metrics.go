@@ -53,6 +53,13 @@ var (
 		},
 		[]string{"reason"},
 	)
+
+	// RateLimitedTotal counts requests rejected by the token-bucket rate limiter.
+	// A sustained non-zero rate here indicates a client is exceeding GOPRESS_RATE_LIMIT.
+	RateLimitedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "gopress_rate_limited_total",
+		Help: "Total number of requests rejected with HTTP 429 by the rate limiter.",
+	})
 )
 
 // Register registers all gopress metrics with the default Prometheus registry.
@@ -64,6 +71,7 @@ func Register() {
 		PoolQueueSize,
 		PoolFreeInstances,
 		PoolRestarts,
+		RateLimitedTotal,
 	)
 }
 

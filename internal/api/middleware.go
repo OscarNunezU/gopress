@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"golang.org/x/time/rate"
+
+	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
 
 type contextKey int
@@ -52,6 +55,11 @@ func rateLimitMiddleware(rps float64, burst int, next http.Handler) http.Handler
 	lim := rate.NewLimiter(rate.Limit(rps), burst)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !lim.Allow() {
+			telemetry.RateLimitedTotal.Inc()
+			slog.Default().Warn("rate limit exceeded",
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
 			w.Header().Set("Retry-After", "1")
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return

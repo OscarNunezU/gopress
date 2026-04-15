@@ -73,7 +73,7 @@ func parseForm(r *http.Request) (html string, assets map[string][]byte, opts bro
 			return "", nil, opts, ferr
 		}
 		data, ferr := io.ReadAll(f)
-		f.Close()
+		_ = f.Close() // read is already done; close error is not actionable here
 		if ferr != nil {
 			return "", nil, opts, ferr
 		}

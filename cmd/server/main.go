@@ -185,5 +185,8 @@ func validateConfig(cfg config) error {
 	if cfg.apiKey != "" && len(cfg.apiKey) < 16 {
 		return fmt.Errorf("GOPRESS_API_KEY must be at least 16 characters when set, got %d", len(cfg.apiKey))
 	}
+	if cfg.rateBurst < 0 {
+		return fmt.Errorf("GOPRESS_RATE_BURST must be >= 0, got %d", cfg.rateBurst)
+	}
 	return nil
 }

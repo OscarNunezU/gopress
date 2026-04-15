@@ -6,8 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
-# GitHub is migrating action runners from Node.js 20 → 24.
-# This opts in now so we don't break on June 2 2026 when 24 becomes the default.
+# Force any remaining Node.js 20 actions (Docker, cosign, syft, etc.) to run on
+# Node.js 24. The core actions (checkout, setup-go, upload-artifact) already
+# target Node 24 natively in v6/v6/v7; this covers third-party actions.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -17,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -48,7 +49,7 @@ jobs:
           awk -v p="$pct" 'BEGIN { if (p+0 < 40) { print "Coverage " p "% is below the 40% threshold"; exit 1 } }'
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
@@ -59,10 +60,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -83,7 +84,7 @@ jobs:
     needs: [test]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Trivy scans the filesystem for known CVEs in Go modules and system packages.
       # CRITICAL/HIGH findings with a fix available fail the build immediately so
@@ -110,7 +111,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -172,7 +173,7 @@ jobs:
             ghcr.io/oscarnunezu/gopress@${{ steps.build.outputs.digest }}
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.spdx.json

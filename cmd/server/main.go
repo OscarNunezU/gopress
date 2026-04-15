@@ -89,6 +89,9 @@ func main() {
 	} else {
 		logger.Warn("API key authentication disabled — POST /pdf is open to all callers")
 	}
+	if cfg.rateLimit > 0 {
+		logger.Info("rate limiting enabled", "rps", cfg.rateLimit, "burst", cfg.rateBurst)
+	}
 
 	select {
 	case err := <-srvErr:

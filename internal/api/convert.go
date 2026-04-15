@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/OscarNunezU/gopress/internal/browser"
 )
@@ -56,6 +57,8 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 		}
 
 		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="document.pdf"`)
+		w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdf)
 	})

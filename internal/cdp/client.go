@@ -322,6 +322,11 @@ func (c *Client) writeFrame(payload []byte) error {
 	return err
 }
 
+// maxWSFrameSize is the largest WebSocket frame payload we will read.
+// Chrome PDF data fits comfortably within 32 MiB; anything larger is either
+// a bug or a misbehaving process — reject it to prevent unbounded allocation.
+const maxWSFrameSize = 32 << 20 // 32 MiB
+
 // readFrame reads one complete WebSocket frame from r.
 // Returns (opcode, payload, nil) on success.
 // Returns (0, nil, io.EOF) for a close frame.
@@ -349,6 +354,10 @@ func readFrame(r io.Reader) (opcode byte, payload []byte, err error) {
 			return 0, nil, fmt.Errorf("read 64-bit length: %w", err)
 		}
 		length = int(binary.BigEndian.Uint64(ext))
+	}
+
+	if length > maxWSFrameSize {
+		return 0, nil, fmt.Errorf("frame payload %d bytes exceeds %d-byte limit", length, maxWSFrameSize)
 	}
 
 	var mask []byte

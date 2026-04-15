@@ -78,10 +78,6 @@ func (i *Instance) Convert(ctx context.Context, job *Job) ([]byte, error) {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("enable Page domain: %w", err)
 	}
-	if err := cdp.EnableLifecycleEvents(ctx, session); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("enable lifecycle events: %w", err)
-	}
 	if err := cdp.EnableNetwork(ctx, session); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("enable Network domain: %w", err)
@@ -265,14 +261,14 @@ func (i *Instance) convertWithAssets(ctx context.Context, session cdp.Sender, jo
 	defer srv.Close()
 
 	// Subscribe BEFORE navigating — avoids the race condition.
-	lifecycleCh := session.Subscribe("Page.lifecycleEvent")
+	loadCh := session.Subscribe("Page.loadEventFired")
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	if err := cdp.Navigate(ctx, session, url); err != nil {
 		return fmt.Errorf("navigate to asset server: %w", err)
 	}
 
-	return waitForNetworkIdle(ctx, lifecycleCh)
+	return waitForEvent(ctx, loadCh)
 }
 
 // waitForEvent blocks until one event arrives on ch or the context is cancelled.
@@ -285,16 +281,3 @@ func waitForEvent(ctx context.Context, ch <-chan cdp.Event) error {
 	}
 }
 
-// waitForNetworkIdle blocks until Page.lifecycleEvent name=networkIdle fires.
-func waitForNetworkIdle(ctx context.Context, ch <-chan cdp.Event) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for network idle: %w", ctx.Err())
-		case evt := <-ch:
-			if name, _ := evt.Params["name"].(string); name == "networkIdle" {
-				return nil
-			}
-		}
-	}
-}

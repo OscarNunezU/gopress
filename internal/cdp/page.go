@@ -84,12 +84,6 @@ func EnablePage(ctx context.Context, s Sender) error {
 	return s.Send(ctx, "Page.enable", nil, nil)
 }
 
-// EnableLifecycleEvents enables Page.lifecycleEvent notifications.
-// Must be called after EnablePage. Required to receive networkIdle events.
-func EnableLifecycleEvents(ctx context.Context, s Sender) error {
-	return s.Send(ctx, "Page.setLifecycleEventsEnabled", map[string]any{"enabled": true}, nil)
-}
-
 // EnableNetwork enables Network domain events.
 func EnableNetwork(ctx context.Context, s Sender) error {
 	return s.Send(ctx, "Network.enable", nil, nil)

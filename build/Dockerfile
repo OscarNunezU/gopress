@@ -99,4 +99,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD ["/usr/bin/gopress", "--healthcheck"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["gopress"]
+CMD ["/usr/bin/gopress"]

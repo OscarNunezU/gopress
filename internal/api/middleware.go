@@ -43,6 +43,16 @@ func requestIDFromContext(ctx context.Context) string {
 	return ""
 }
 
+// securityHeadersMiddleware adds defensive HTTP headers to every response.
+// Applied globally so no handler can forget them.
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent MIME-type sniffing on error responses.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // rateLimitMiddleware rejects excess requests with 429 Too Many Requests and a
 // Retry-After: 1 header. When rps ≤ 0, the middleware is a no-op.
 func rateLimitMiddleware(rps float64, burst int, next http.Handler) http.Handler {

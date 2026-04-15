@@ -73,7 +73,10 @@ jobs:
       # from source compiles the linter with the system Go (1.26), removing
       # the version mismatch entirely.
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        # Install from source so the linter is compiled with the system Go (1.26).
+        # Pre-built binaries target go1.24 and refuse to typecheck go 1.26 modules.
+        # Version is pinned so CI does not break when a new release ships.
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.11.4
 
       - name: Run golangci-lint
         run: golangci-lint run ./...

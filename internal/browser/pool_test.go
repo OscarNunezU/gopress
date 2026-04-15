@@ -114,6 +114,57 @@ func TestPoolErrQueueFull(t *testing.T) {
 	}
 }
 
+func TestPoolConvertCanceledBeforeEnqueue(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	fi := &fakeInstance{
+		convertFn: func(ctx context.Context, job *Job) ([]byte, error) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+			return []byte("%PDF"), nil
+		},
+	}
+
+	// QueueDepth=1: one slot in the buffer, one worker that will be busy.
+	cfg := PoolConfig{Size: 1, QueueDepth: 1}
+	p := &Pool{
+		cfg:    cfg,
+		queue:  make(chan *pendingJob, cfg.QueueDepth),
+		done:   make(chan struct{}),
+		logger: noopLogger(t),
+	}
+	p.newInstance = func(ctx context.Context, port int) (instance, error) {
+		return &fakeInstance{}, nil
+	}
+	s := &slot{index: 0, inst: fi}
+	p.slots = append(p.slots, s)
+	go p.worker(s)
+	defer func() { close(release); p.Close() }()
+
+	// Keep the worker busy so the queue slot is occupied.
+	go p.Convert(context.Background(), &Job{HTML: "block"}) //nolint:errcheck
+	<-started
+
+	// Fill the 1-slot queue buffer directly.
+	dummy := make(chan jobResult, 1)
+	p.wg.Add(1)
+	p.queue <- &pendingJob{ctx: context.Background(), job: &Job{HTML: "fill"}, result: dummy}
+
+	// Queue is full. A pre-cancelled context must return context.Canceled
+	// (not ErrQueueFull) because ctx.Done() takes precedence over default.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := p.Convert(ctx, &Job{HTML: "pre-cancel"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
 func TestPoolContextCancelWhileWaiting(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

@@ -71,6 +71,25 @@ func TestRateLimitMiddleware(t *testing.T) {
 		}
 	})
 
+	t.Run("burst_defaults_to_one_when_zero", func(t *testing.T) {
+		// burst=0 is corrected to 1 internally; the second request must be rejected.
+		h := rateLimitMiddleware(0.001, 0, okHandler)
+
+		r1 := httptest.NewRequest(http.MethodPost, "/pdf", nil)
+		w1 := httptest.NewRecorder()
+		h.ServeHTTP(w1, r1)
+		if w1.Code != http.StatusOK {
+			t.Errorf("first request: status = %d, want %d", w1.Code, http.StatusOK)
+		}
+
+		r2 := httptest.NewRequest(http.MethodPost, "/pdf", nil)
+		w2 := httptest.NewRecorder()
+		h.ServeHTTP(w2, r2)
+		if w2.Code != http.StatusTooManyRequests {
+			t.Errorf("second request: status = %d, want %d", w2.Code, http.StatusTooManyRequests)
+		}
+	})
+
 	t.Run("rejects_when_burst_exceeded", func(t *testing.T) {
 		// burst=1, rps=0.001 — second request is always rejected immediately
 		h := rateLimitMiddleware(0.001, 1, okHandler)

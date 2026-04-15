@@ -52,13 +52,16 @@ deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%
         fonts-noto-cjk \
         fonts-noto-color-emoji \
         fonts-noto-core \
-        # Chrome runtime libs.
+        # Chrome runtime libs (from /opt/chrome/deb.deps — verified via ldd).
+        libasound2t64 \
         libatk1.0-0 \
         libatk-bridge2.0-0 \
+        libcairo2 \
         libcups2 \
         libdrm2 \
         libgbm1 \
         libnss3 \
+        libpango-1.0-0 \
         libxkbcommon0 \
         libxcomposite1 \
         libxdamage1 \
@@ -86,7 +89,7 @@ COPY build/fonts.conf /etc/fonts/conf.d/100-gopress.conf
 ENV CHROME_BIN_PATH=/usr/bin/chrome
 ENV GOPRESS_PORT=3000
 ENV GOPRESS_POOL_SIZE=4
-ENV GOPRESS_MAX_CONVERSIONS=100
+ENV GOPRESS_MAX_CONVERSIONS=500
 
 USER gopress
 WORKDIR /home/gopress

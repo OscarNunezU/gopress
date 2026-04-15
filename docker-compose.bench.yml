@@ -1,0 +1,49 @@
+# docker-compose.bench.yml — Linux benchmark: builds gopress from source and runs
+# the bench tool in a Go container against it.  All Linux, all in Docker.
+#
+# Usage:
+#   docker compose -f docker-compose.bench.yml up --build --abort-on-container-exit
+#
+# Or via Makefile:
+#   make bench-docker
+#
+# Set VUS / DURATION / DOC via environment or Makefile variables:
+#   VUS=8 DURATION=60s make bench-docker
+services:
+  gopress:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.bench
+    environment:
+      GOPRESS_PORT: "3000"
+      GOPRESS_POOL_SIZE: "4"
+      # 0 = no restart limit: measures peak steady-state throughput.
+      # Production default is 500 (memory hygiene). For a fair competitor
+      # comparison, both services must run without mid-test restarts.
+      GOPRESS_MAX_CONVERSIONS: "0"
+    # seccomp=unconfined: the Chrome for Testing profile is too restrictive for
+    # debian's Chromium (different build flags / syscall surface).
+    # This compose file is for local benchmarking only — not production.
+    security_opt:
+      - seccomp:unconfined
+    # Chromium benefits from larger shared memory even with --disable-dev-shm-usage.
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "/usr/bin/gopress", "--healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  bench:
+    build:
+      context: .
+      dockerfile: bench/Dockerfile
+    depends_on:
+      gopress:
+        condition: service_healthy
+    command:
+      - "-target=http://gopress:3000"
+      - "-all"
+      - "-vus=${VUS:-4}"
+      - "-duration=${DURATION:-30s}"

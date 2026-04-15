@@ -135,7 +135,7 @@ func loadConfig() config {
 		port:           envInt("GOPRESS_PORT", 3000),
 		chromeBin:      envStr("CHROME_BIN_PATH", "/usr/bin/chrome"),
 		poolSize:       envInt("GOPRESS_POOL_SIZE", 4),
-		maxConversions: envInt("GOPRESS_MAX_CONVERSIONS", 100),
+		maxConversions: envInt("GOPRESS_MAX_CONVERSIONS", 500),
 		queueDepth:     envInt("GOPRESS_QUEUE_DEPTH", 0),
 		otlpEndpoint:   envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		apiKey:         envStr("GOPRESS_API_KEY", ""),

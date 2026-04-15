@@ -101,6 +101,12 @@ bench: ## HTML→PDF load benchmark: simple doc, 4 VUs, 30s (set VUS= DURATION= 
 bench-all: ## Run benchmark for both simple and complex documents
 	go run ./bench -vus=$(VUS) -duration=$(DURATION) -all
 
+.PHONY: bench-docker
+bench-docker: ## Run benchmark on Linux inside Docker — production-representative numbers (set VUS= DURATION=)
+	VUS=$(VUS) DURATION=$(DURATION) docker compose -f docker-compose.bench.yml up \
+		--build --abort-on-container-exit --exit-code-from bench
+	docker compose -f docker-compose.bench.yml down --remove-orphans
+
 .PHONY: bench-compare
 bench-compare: ## Side-by-side: gopress vs Gotenberg (requires Gotenberg on localhost:3010)
 	@echo ""

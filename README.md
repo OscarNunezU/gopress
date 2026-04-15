@@ -98,7 +98,7 @@ All configuration is via environment variables.
 |----------|---------|-------------|
 | `GOPRESS_PORT` | `3000` | HTTP listen port |
 | `GOPRESS_POOL_SIZE` | `4` | Number of Chromium instances |
-| `GOPRESS_MAX_CONVERSIONS` | `100` | Conversions per instance before restart |
+| `GOPRESS_MAX_CONVERSIONS` | `500` | Conversions per instance before restart. 0 disables restarts. Tune down for very large documents; tune up (or disable) for small ones. |
 | `GOPRESS_QUEUE_DEPTH` | `0 (auto)` | Pending-job buffer size. 0 = `GOPRESS_POOL_SIZE × 4` |
 | `CHROME_BIN_PATH` | `/usr/bin/chrome` | Path to the Chrome/Chromium binary |
 | `GOPRESS_API_KEY` | _(empty)_ | Bearer token for `POST /pdf`. Leave empty to disable auth. Minimum 16 characters when set. |

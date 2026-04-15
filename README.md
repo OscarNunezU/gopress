@@ -87,6 +87,8 @@ Prometheus metrics endpoint.
 | `gopress_conversion_duration_seconds` | histogram | End-to-end conversion latency |
 | `gopress_pool_queue_size` | gauge | Jobs waiting in the queue |
 | `gopress_pool_free_instances` | gauge | Idle browser instances |
+| `gopress_pool_restarts_total` | counter | Instance restarts, labelled `reason={max_conversions,crash}` |
+| `gopress_rate_limited_total` | counter | Requests rejected with HTTP 429 |
 
 ## Configuration
 
@@ -97,14 +99,18 @@ All configuration is via environment variables.
 | `GOPRESS_PORT` | `3000` | HTTP listen port |
 | `GOPRESS_POOL_SIZE` | `4` | Number of Chromium instances |
 | `GOPRESS_MAX_CONVERSIONS` | `100` | Conversions per instance before restart |
+| `GOPRESS_QUEUE_DEPTH` | `0 (auto)` | Pending-job buffer size. 0 = `GOPRESS_POOL_SIZE × 4` |
 | `CHROME_BIN_PATH` | `/usr/bin/chrome` | Path to the Chrome/Chromium binary |
+| `GOPRESS_API_KEY` | _(empty)_ | Bearer token for `POST /pdf`. Leave empty to disable auth. Minimum 16 characters when set. |
+| `GOPRESS_RATE_LIMIT` | `0` | Maximum steady-state requests/second for `POST /pdf`. 0 disables rate limiting. |
+| `GOPRESS_RATE_BURST` | `0` | Token-bucket burst size. 0 defaults to 1 when `GOPRESS_RATE_LIMIT > 0`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | _(empty)_ | OTLP gRPC endpoint. Tracing is disabled when empty. |
 
 Copy [`.env.example`](.env.example) to `.env` and adjust to your environment.
 
 ## Building from source
 
-Requirements: Go 1.23+, a local Chrome/Chromium binary.
+Requirements: Go 1.26+, a local Chrome/Chromium binary.
 
 ```bash
 # Build binary

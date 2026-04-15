@@ -461,6 +461,27 @@ func TestSendWriteFrameError(t *testing.T) {
 	}
 }
 
+// TestReadFrameCloseFrame verifies that readFrame returns (0, nil, io.EOF) when
+// it receives a WebSocket close frame (opcode 0x8), per RFC 6455 §5.5.1.
+func TestReadFrameCloseFrame(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		// Close frame: FIN=1, opcode=8, unmasked, length=0.
+		_, _ = serverConn.Write([]byte{0x88, 0x00})
+	}()
+
+	_, payload, err := readFrame(clientConn)
+	if err != io.EOF {
+		t.Fatalf("readFrame close frame: err = %v, want io.EOF", err)
+	}
+	if payload != nil {
+		t.Errorf("readFrame close frame: payload = %v, want nil", payload)
+	}
+}
+
 // TestReadFrameMaskedPayload verifies that readFrame correctly XOR-decodes a
 // masked frame (MASK=1). RFC 6455 §5.1 forbids servers from masking, but the
 // implementation handles it defensively.

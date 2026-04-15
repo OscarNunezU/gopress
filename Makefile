@@ -10,7 +10,7 @@ endif
 VERSION        ?= dev
 GO_VERSION     ?= 1.26.2
 CHROME_VERSION ?= 147.0.7727.56
-CHROME_SHA256  ?=
+CHROME_SHA256  ?= 6019890a909bb6359ea40c2f0f82d40c25dae52aa6fcb9c7706739b8dcd6b28e
 DEBIAN_SNAPSHOT ?= 20260414T000000Z
 DOCKER_REPO    = ghcr.io/oscarnunezu/gopress
 DOCKERFILE     = build/Dockerfile

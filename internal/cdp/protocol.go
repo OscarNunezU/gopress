@@ -3,12 +3,15 @@
 package cdp
 
 // Message is the base JSON-RPC envelope used by the CDP protocol.
+// SessionID is non-empty when the message targets a specific browser tab
+// via flat-mode session multiplexing (Target.attachToTarget flatten:true).
 type Message struct {
-	ID     int    `json:"id,omitempty"`
-	Method string `json:"method,omitempty"`
-	Params any    `json:"params,omitempty"`
-	Result any    `json:"result,omitempty"`
-	Error  *Error `json:"error,omitempty"`
+	ID        int    `json:"id,omitempty"`
+	Method    string `json:"method,omitempty"`
+	Params    any    `json:"params,omitempty"`
+	Result    any    `json:"result,omitempty"`
+	Error     *Error `json:"error,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
 }
 
 // Error represents a CDP protocol error.

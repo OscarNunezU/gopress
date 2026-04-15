@@ -1,0 +1,99 @@
+# build/Dockerfile.bench — self-contained gopress image for local benchmarking.
+#
+# Downloads Chrome for Testing directly from Google Storage (same version as
+# production) so benchmark results are comparable.  Intended only for local
+# benchmark runs — not for production.  Production image: build/Dockerfile.
+ARG GOLANG_VERSION=1.26.2
+ARG CHROME_VERSION=147.0.7727.56
+
+# ── Build stage ──────────────────────────────────────────────────────────────
+FROM golang:1.26.2@sha256:fcdb3e42c5544e9682a635771eac76a698b66de79b1b50ec5b9ce5c5f14ad775 AS build-stage
+
+ARG VERSION=bench
+ENV CGO_ENABLED=0
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+COPY cmd ./cmd
+COPY internal ./internal
+
+RUN go build \
+    -ldflags="-s -w -X github.com/OscarNunezU/gopress/internal/api.version=${VERSION}" \
+    -o gopress \
+    ./cmd/server
+
+# ── Chrome download stage ─────────────────────────────────────────────────────
+FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a AS chrome-stage
+
+ARG CHROME_VERSION
+
+RUN apt-get update -qq \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        curl ca-certificates unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL \
+        "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip" \
+        -o /tmp/chrome.zip \
+    && unzip -q /tmp/chrome.zip -d /opt \
+    && mv /opt/chrome-linux64 /opt/chrome \
+    && rm /tmp/chrome.zip \
+    && test -x /opt/chrome/chrome
+
+# ── Final stage ───────────────────────────────────────────────────────────────
+FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a
+
+ARG GOPRESS_USER_UID=1001
+ARG GOPRESS_USER_GID=1001
+
+RUN apt-get update -qq \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        tini \
+        fonts-liberation \
+        fonts-noto-core \
+        libasound2t64 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcairo2 \
+        libcups2 \
+        libdrm2 \
+        libgbm1 \
+        libnss3 \
+        libpango-1.0-0 \
+        libxkbcommon0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN groupadd --gid ${GOPRESS_USER_GID} gopress \
+    && useradd --uid ${GOPRESS_USER_UID} --gid gopress \
+        --shell /bin/bash --home /home/gopress --no-create-home gopress \
+    && mkdir /home/gopress \
+    && chown gopress: /home/gopress
+
+COPY --from=chrome-stage /opt/chrome /opt/chrome
+RUN ln -s /opt/chrome/chrome /usr/bin/chrome
+
+COPY --from=build-stage /app/gopress /usr/bin/gopress
+COPY build/fonts.conf /etc/fonts/conf.d/100-gopress.conf
+
+ENV CHROME_BIN_PATH=/usr/bin/chrome
+ENV GOPRESS_PORT=3000
+ENV GOPRESS_POOL_SIZE=4
+ENV GOPRESS_MAX_CONVERSIONS=500
+
+USER gopress
+WORKDIR /home/gopress
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=5s --timeout=5s --start-period=30s --retries=12 \
+    CMD ["/usr/bin/gopress", "--healthcheck"]
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/usr/bin/gopress"]

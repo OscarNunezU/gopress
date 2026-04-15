@@ -1,0 +1,37 @@
+# golangci-lint configuration for gopress.
+# Linters are pinned explicitly — new golangci-lint releases cannot silently
+# add checkers that break CI on already-correct code.
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # unhandled errors (catches accidental _ = ignores)
+    - govet         # built-in go vet checks
+    - staticcheck   # SA/S/ST analysers from staticcheck.io
+    - ineffassign   # variable assigned but never read
+    - unused        # unexported identifiers never referenced
+    - bodyclose     # HTTP response body not closed
+    - noctx         # http.NewRequest without context
+
+linters-settings:
+  errcheck:
+    # Also check errors from type assertions: x, ok := y.(T)
+    check-type-assertions: true
+
+issues:
+  # Don't limit the number of reported issues.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Test files: allow unhandled errors in helpers, defer cancel(), etc.
+    - path: "_test\\.go"
+      linters: [errcheck]
+
+    # cmd/server/main.go uses http.Get without context in --healthcheck mode.
+    # The call is annotated //nolint:noctx at the source; this rule is a
+    # belt-and-suspenders guard so the file-level nolint is not required.
+    - path: "cmd/server/main\\.go"
+      linters: [noctx]

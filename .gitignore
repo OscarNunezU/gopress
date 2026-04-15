@@ -1,6 +1,7 @@
 # Binary
 gopress
 gopress.exe
+*.exe~
 
 # Build artifacts
 dist/
@@ -25,4 +26,5 @@ Thumbs.db
 
 # Test output
 *.out
+*.test
 coverage.html

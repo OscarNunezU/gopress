@@ -1,0 +1,35 @@
+services:
+  gopress:
+    image: ghcr.io/oscarnunezu/gopress:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GOPRESS_PORT: "3000"
+      GOPRESS_POOL_SIZE: "2"
+      GOPRESS_MAX_CONVERSIONS: "100"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+    security_opt:
+      # Hardened seccomp profile — denies all syscalls not explicitly required
+      # by Chrome headless (--no-sandbox) and the gopress Go binary.
+      - seccomp:./build/chrome.seccomp.json
+    depends_on:
+      - prometheus
+      - jaeger
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./build/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    restart: unless-stopped

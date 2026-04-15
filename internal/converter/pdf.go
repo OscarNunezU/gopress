@@ -3,18 +3,31 @@ package converter
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/OscarNunezU/gopress/internal/browser"
+	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
+
+// poolIface is the subset of *browser.Pool used by Converter.
+// Declaring the interface here (not in the browser package) keeps the
+// dependency direction correct and makes the Converter unit-testable.
+type poolIface interface {
+	Convert(ctx context.Context, job *browser.Job) ([]byte, error)
+}
 
 // Converter converts HTML documents to PDF using a browser pool.
 type Converter struct {
-	pool *browser.Pool
+	pool poolIface
 }
 
 // New creates a Converter backed by the given pool.
-func New(pool *browser.Pool) *Converter {
+func New(pool poolIface) *Converter {
 	return &Converter{pool: pool}
 }
 
@@ -24,6 +37,15 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 		return nil, fmt.Errorf("html content is required")
 	}
 
+	ctx, span := telemetry.Tracer().Start(ctx, "conversion")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("html.length", len(html)),
+		attribute.Int("assets.count", len(assets)),
+	)
+
+	start := time.Now()
 	job := &browser.Job{
 		HTML:    html,
 		Assets:  assets,
@@ -31,9 +53,41 @@ func (c *Converter) Convert(ctx context.Context, html string, assets map[string]
 	}
 
 	pdf, err := c.pool.Convert(ctx, job)
+	duration := time.Since(start).Seconds()
+
+	status := conversionStatus(err)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+	}
+
+	telemetry.ConversionsTotal.WithLabelValues(status).Inc()
+	telemetry.ConversionDuration.WithLabelValues(status).Observe(duration)
+
 	if err != nil {
 		return nil, fmt.Errorf("convert html to pdf: %w", err)
 	}
 
+	telemetry.ConversionSizeBytes.Observe(float64(len(pdf)))
+	span.SetAttributes(attribute.Int("pdf.size_bytes", len(pdf)))
 	return pdf, nil
+}
+
+// conversionStatus maps an error to a metric label.
+//
+//   - "ok"           — no error
+//   - "queue_full"   — pool queue was at capacity (ErrQueueFull)
+//   - "timeout"      — request context exceeded its deadline or was cancelled
+//   - "chrome_error" — any other Chrome/CDP failure
+func conversionStatus(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if errors.Is(err, browser.ErrQueueFull) {
+		return "queue_full"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return "timeout"
+	}
+	return "chrome_error"
 }

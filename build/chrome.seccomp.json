@@ -1,0 +1,115 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "architectures": ["SCMP_ARCH_X86_64"],
+  "syscalls": [
+    {
+      "names": [
+        "read", "readv", "pread64", "preadv", "preadv2",
+        "write", "writev", "pwrite64", "pwritev", "pwritev2",
+        "open", "openat", "creat", "close",
+        "stat", "fstat", "lstat", "newfstatat", "statx",
+        "lseek",
+        "dup", "dup2", "dup3",
+        "pipe", "pipe2",
+        "truncate", "ftruncate", "fallocate",
+        "flock", "fsync", "fdatasync", "sync", "syncfs", "sync_file_range",
+        "access", "faccessat",
+        "getcwd", "chdir", "fchdir",
+        "mkdir", "mkdirat", "rmdir",
+        "rename", "renameat", "renameat2",
+        "unlink", "unlinkat",
+        "link", "linkat",
+        "symlink", "symlinkat",
+        "readlink", "readlinkat",
+        "chmod", "fchmod", "fchmodat",
+        "chown", "fchown", "fchownat", "lchown",
+        "mknod", "mknodat",
+        "statfs", "fstatfs",
+        "getdents", "getdents64",
+        "sendfile", "splice", "tee", "vmsplice", "copy_file_range",
+        "fcntl", "ioctl",
+
+        "mmap", "munmap", "mremap", "mprotect", "madvise",
+        "mincore", "msync",
+        "mlock", "munlock", "mlockall", "munlockall", "mlock2",
+        "brk",
+        "shmat", "shmdt", "shmget", "shmctl",
+        "memfd_create",
+
+        "clone", "fork", "vfork",
+        "execve", "execveat",
+        "exit", "exit_group",
+        "wait4", "waitid",
+        "getpid", "getppid", "gettid",
+        "getpgid", "setpgid", "setsid", "getsid",
+        "kill", "tgkill", "tkill",
+        "rt_sigaction", "rt_sigprocmask", "rt_sigreturn",
+        "rt_sigpending", "rt_sigsuspend", "sigaltstack",
+        "rt_sigtimedwait", "rt_sigqueueinfo", "rt_tgsigqueueinfo",
+        "prctl", "arch_prctl",
+        "personality",
+        "umask",
+
+        "futex", "set_robust_list", "get_robust_list",
+        "set_tid_address",
+        "membarrier",
+        "rseq",
+
+        "sched_yield",
+        "sched_setaffinity", "sched_getaffinity",
+        "sched_setscheduler", "sched_getscheduler",
+        "sched_setparam", "sched_getparam",
+        "sched_get_priority_max", "sched_get_priority_min",
+        "sched_rr_get_interval",
+        "sched_setattr", "sched_getattr",
+
+        "clock_gettime", "clock_getres", "clock_nanosleep",
+        "gettimeofday", "time", "nanosleep",
+        "timer_create", "timer_settime", "timer_gettime",
+        "timer_getoverrun", "timer_delete",
+        "timerfd_create", "timerfd_settime", "timerfd_gettime",
+        "getitimer", "setitimer", "alarm",
+
+        "getuid", "getgid", "geteuid", "getegid", "getgroups",
+        "setuid", "setgid", "setreuid", "setregid",
+        "setresuid", "getresuid", "setresgid", "getresgid",
+        "setgroups", "setfsuid", "setfsgid",
+        "capget", "capset",
+
+        "getrlimit", "setrlimit", "prlimit64", "getrusage",
+        "sysinfo", "times", "uname",
+
+        "socket", "connect", "accept", "accept4",
+        "bind", "listen", "getsockname", "getpeername",
+        "sendto", "recvfrom", "sendmsg", "recvmsg",
+        "sendmmsg", "recvmmsg",
+        "socketpair", "setsockopt", "getsockopt", "shutdown",
+
+        "select", "pselect6", "poll", "ppoll",
+        "epoll_create", "epoll_create1", "epoll_ctl",
+        "epoll_wait", "epoll_pwait",
+        "eventfd", "eventfd2",
+        "inotify_init", "inotify_init1",
+        "inotify_add_watch", "inotify_rm_watch",
+        "signalfd", "signalfd4",
+
+        "io_setup", "io_destroy", "io_getevents",
+        "io_submit", "io_cancel", "io_pgetevents",
+
+        "semget", "semop", "semtimedop", "semctl",
+        "msgget", "msgsnd", "msgrcv", "msgctl",
+        "mq_open", "mq_unlink", "mq_timedsend",
+        "mq_timedreceive", "mq_notify", "mq_getsetattr",
+
+        "setxattr", "getxattr", "lsetxattr", "lgetxattr",
+        "fsetxattr", "fgetxattr",
+        "listxattr", "llistxattr", "flistxattr",
+        "removexattr", "lremovexattr", "fremovexattr",
+
+        "getrandom",
+        "sysfs"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

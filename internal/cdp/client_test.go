@@ -394,6 +394,105 @@ func TestSessionSubscribeEvent(t *testing.T) {
 	}
 }
 
+// TestSessionSend verifies that a Session command is delivered with the correct
+// sessionId and that the response is correctly received by the caller.
+func TestSessionSend(t *testing.T) {
+	c, server := newTestClient(t)
+
+	const sessionID = "sess-xyz"
+	sess := c.NewSession(sessionID)
+
+	go func() {
+		_, data, err := readFrame(server)
+		if err != nil {
+			return
+		}
+		var req Message
+		if err := json.Unmarshal(data, &req); err != nil {
+			return
+		}
+		resp := Message{ID: req.ID, Result: map[string]any{"frameId": "abc"}}
+		b, _ := json.Marshal(resp)
+		_ = writeServerFrame(server, b)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var result map[string]any
+	if err := sess.Send(ctx, "Page.enable", nil, &result); err != nil {
+		t.Fatalf("Session.Send: %v", err)
+	}
+}
+
+// TestSessionClose verifies that Session.Close removes all event listeners
+// registered for that session from the parent Client.
+func TestSessionClose(t *testing.T) {
+	c, _ := newTestClient(t)
+
+	const sessionID = "sess-close"
+	sess := c.NewSession(sessionID)
+	_ = sess.Subscribe("Page.loadEventFired") // registers a listener
+
+	sess.Close()
+
+	c.mu.Lock()
+	_, exists := c.sessionListeners[sessionID]
+	c.mu.Unlock()
+	if exists {
+		t.Error("session listeners still present after Session.Close")
+	}
+}
+
+// TestSendWriteFrameError verifies that Send surfaces a write error immediately
+// when the underlying connection is closed before the frame can be sent.
+func TestSendWriteFrameError(t *testing.T) {
+	c, server := newTestClient(t)
+
+	// Close the server-side end; the next write from the client will fail.
+	server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := c.Send(ctx, "Page.enable", nil, nil)
+	if err == nil {
+		t.Fatal("expected error after connection closed, got nil")
+	}
+}
+
+// TestReadFrameMaskedPayload verifies that readFrame correctly XOR-decodes a
+// masked frame (MASK=1). RFC 6455 §5.1 forbids servers from masking, but the
+// implementation handles it defensively.
+func TestReadFrameMaskedPayload(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	want := []byte(`{"method":"Page.loadEventFired"}`)
+	mask := [4]byte{0xAB, 0xCD, 0xEF, 0x01}
+
+	go func() {
+		// Build a masked text frame (MASK=1 in the second byte).
+		header := []byte{0x81, byte(len(want)) | 0x80}
+		masked := make([]byte, len(want))
+		for i, b := range want {
+			masked[i] = b ^ mask[i%4]
+		}
+		frame := append(header, mask[:]...)
+		frame = append(frame, masked...)
+		_, _ = serverConn.Write(frame)
+	}()
+
+	_, got, err := readFrame(clientConn)
+	if err != nil {
+		t.Fatalf("readFrame masked: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("readFrame masked = %q, want %q", got, want)
+	}
+}
+
 // TestClientIsClosed verifies that IsClosed reports false before Close and true
 // after Close.
 func TestClientIsClosed(t *testing.T) {

@@ -298,6 +298,20 @@ func TestPoolCloseIdempotent(t *testing.T) {
 	p.Close()
 }
 
+// TestPoolConvertAfterClose verifies that Convert returns ErrQueueFull when
+// called on a pool that has already been closed (shutdown pre-check path).
+func TestPoolConvertAfterClose(t *testing.T) {
+	fi := &fakeInstance{}
+	p := newTestPool(t, 1, []*fakeInstance{fi})
+
+	p.Close()
+
+	_, err := p.Convert(context.Background(), &Job{HTML: "<p>x</p>"})
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected ErrQueueFull after Close, got %v", err)
+	}
+}
+
 func TestPoolWorkerRestartBackoff(t *testing.T) {
 	t.Run("retries_after_backoff_and_recovers", func(t *testing.T) {
 		// newInstance fails twice, succeeds on the third attempt.

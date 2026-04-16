@@ -19,13 +19,23 @@ import (
 	"github.com/OscarNunezU/gopress/internal/telemetry"
 )
 
+// browserClient is the subset of cdp.Client used by Instance.
+// Defined as an interface to allow testing without a real Chrome process.
+type browserClient interface {
+	Send(ctx context.Context, method string, params any, result any) error
+	Subscribe(method string) <-chan cdp.Event
+	NewSession(sessionID string) *cdp.Session
+	IsClosed() bool
+	Close() error
+}
+
 // Instance wraps a Chromium process and a single persistent CDP connection.
 // One Instance handles one conversion at a time; each conversion opens and
 // closes a tab session over the shared WebSocket connection — no new TCP
 // connections or WebSocket handshakes per conversion.
 type Instance struct {
 	process        *Process
-	client         *cdp.Client // persistent browser-level connection
+	client         browserClient // persistent browser-level connection
 	conversions    int
 	maxConversions int
 	logger         *slog.Logger

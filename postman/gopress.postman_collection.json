@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "gopress API",
-    "description": "Colección completa para gopress — servicio HTML → PDF.\n\n**Variable requerida:**\n- `base_url` → `http://localhost:3000` (ajustar si usas otro puerto)\n- `examples_dir` → ruta absoluta a la carpeta `postman/examples` de este repo\n\n**Endpoints disponibles:**\n- `GET /health` — estado del servicio\n- `GET /version` — versión del binario\n- `GET /metrics` — métricas Prometheus\n- `POST /pdf` — convierte HTML a PDF (JSON o multipart)",
+    "description": "Complete collection for gopress — HTML → PDF service.\n\n**Required variables:**\n- `base_url` → `http://localhost:3000` (adjust if using a different port)\n- `examples_dir` → absolute path to the `postman/examples` folder in this repo\n\n**Available endpoints:**\n- `GET /health` — service health check\n- `GET /version` — binary version\n- `GET /metrics` — Prometheus metrics\n- `POST /pdf` — convert HTML to PDF (JSON or multipart)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,22 +12,22 @@
     },
     {
       "key": "examples_dir",
-      "value": "/ruta/a/gopress/postman/examples",
+      "value": "/path/to/gopress/postman/examples",
       "type": "string",
-      "description": "Ruta absoluta a la carpeta postman/examples del repositorio"
+      "description": "Absolute path to the postman/examples folder in this repository"
     }
   ],
   "item": [
     {
       "name": "Health",
-      "description": "Endpoints de diagnóstico y monitoreo.",
+      "description": "Diagnostic and monitoring endpoints.",
       "item": [
         {
           "name": "GET /health",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/health",
-            "description": "Retorna `{\"status\":\"ok\"}` si el servicio está levantado."
+            "description": "Returns `{\"status\":\"ok\"}` when the service is up."
           }
         },
         {
@@ -35,7 +35,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/version",
-            "description": "Retorna la versión del binario compilado (ej: `{\"version\":\"v0.1.0\"}`)."
+            "description": "Returns the compiled binary version (e.g. `{\"version\":\"v0.1.0\"}`)."
           }
         },
         {
@@ -43,17 +43,17 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/metrics",
-            "description": "Métricas en formato Prometheus (texto plano). Útil para Grafana / Prometheus scraping."
+            "description": "Prometheus metrics in plain text format. Useful for Grafana / Prometheus scraping."
           }
         }
       ]
     },
     {
       "name": "POST /pdf — JSON",
-      "description": "Convierte HTML a PDF enviando `application/json`.\nIdeal cuando el HTML es auto-contenido (sin assets externos).\n\nEsquema:\n```json\n{\n  \"html\": \"<h1>...</h1>\",\n  \"options\": { ... }   // opcional\n}\n```",
+      "description": "Convert HTML to PDF using `application/json`.\nBest for self-contained HTML (no external assets).\n\nSchema:\n```json\n{\n  \"html\": \"<h1>...</h1>\",\n  \"options\": { ... }   // optional\n}\n```",
       "item": [
         {
-          "name": "01 · HTML simple",
+          "name": "01 · Simple HTML",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -62,14 +62,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px;color:#333}h1{color:#2b6cb0}</style></head><body><h1>Hola desde gopress</h1><p>PDF generado vía JSON con <strong>gopress</strong>.</p></body></html>\"\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px;color:#333}h1{color:#2b6cb0}</style></head><body><h1>Hello from gopress</h1><p>This PDF was generated via JSON with <strong>gopress</strong>.</p></body></html>\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Petición mínima: solo HTML, sin opciones. Útil para probar que el servicio responde."
+            "description": "Minimal request: HTML only, no options. Use this to verify the service is responding."
           }
         },
         {
-          "name": "02 · Autorización electrónica",
+          "name": "02 · Electronic Authorization",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -78,14 +78,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:3px solid #2b6cb0;margin-bottom:28px}.logo{font-size:26px;font-weight:900;color:#2b6cb0}.logo span{color:#e53e3e}.badge{display:inline-block;background:#276749;color:white;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:bold;margin-bottom:8px}.doc-title{text-align:center;margin-bottom:24px}.doc-title h1{font-size:18px;color:#2b6cb0;text-transform:uppercase;letter-spacing:2px}table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#2b6cb0;color:white;padding:9px 12px;text-align:left;font-size:12px}td{padding:9px 12px;border-bottom:1px solid #e2e8f0}.total-row td{background:#ebf8ff!important;font-weight:bold}.text-right{text-align:right}.sig-area{display:flex;justify-content:space-around;margin-top:60px}.sig-box{text-align:center;width:180px}.sig-line{border-top:1px solid #4a5568;padding-top:8px;margin-top:40px}</style></head><body><div class='header'><div><div class='logo'>ACME<span>.</span>corp</div><div style='font-size:11px;color:#718096'>RUT: 76.123.456-7 &mdash; Av. Providencia 1234, Santiago</div></div><div style='text-align:right'><div class='badge'>&#10003; AUTORIZADO</div><div style='font-size:15px;font-weight:bold;color:#2b6cb0'>N&deg; AUT-2024-00847</div><div style='font-size:11px;color:#718096'>Emitido: 15 de abril de 2024</div></div></div><div class='doc-title'><h1>Autorización Electrónica de Compra</h1><p style='font-size:11px;color:#718096'>Documento generado electrónicamente</p></div><table><tr><th colspan='2'>Datos del Solicitante</th></tr><tr><td>Nombre</td><td>Juan Carlos Pérez González</td></tr><tr><td>Cargo</td><td>Jefe de Abastecimiento</td></tr><tr><td>Centro de Costo</td><td>CC-440 &mdash; Operaciones</td></tr></table><table><tr><th>N&deg;</th><th>Descripción</th><th class='text-right'>Cant.</th><th class='text-right'>Precio Unit.</th><th class='text-right'>Total</th></tr><tr><td>001</td><td>Laptop Dell XPS 15</td><td class='text-right'>3</td><td class='text-right'>$1.299.990</td><td class='text-right'>$3.899.970</td></tr><tr><td>002</td><td>Monitor LG 27&rdquo; 4K</td><td class='text-right'>3</td><td class='text-right'>$449.990</td><td class='text-right'>$1.349.970</td></tr><tr><td>003</td><td>Kit teclado + mouse Logitech MK850</td><td class='text-right'>3</td><td class='text-right'>$59.990</td><td class='text-right'>$179.970</td></tr><tr class='total-row'><td colspan='4' class='text-right'>TOTAL IVA INCLUIDO</td><td class='text-right'>$5.699.880</td></tr></table><div class='sig-area'><div class='sig-box'><div class='sig-line'><strong>Juan C. Pérez</strong><br><span style='font-size:11px;color:#718096'>Solicitante</span></div></div><div class='sig-box'><div class='sig-line'><strong>María López</strong><br><span style='font-size:11px;color:#718096'>Finanzas</span></div></div><div class='sig-box'><div class='sig-line'><strong>Roberto Silva</strong><br><span style='font-size:11px;color:#718096'>Gerente General</span></div></div></div></body></html>\",\n  \"options\": {\n    \"printBackground\": true,\n    \"marginTop\": 0,\n    \"marginBottom\": 0,\n    \"marginLeft\": 0,\n    \"marginRight\": 0\n  }\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:3px solid #2b6cb0;margin-bottom:28px}.logo{font-size:26px;font-weight:900;color:#2b6cb0}.logo span{color:#e53e3e}.badge{display:inline-block;background:#276749;color:white;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:bold;margin-bottom:8px}.doc-title{text-align:center;margin-bottom:24px}.doc-title h1{font-size:18px;color:#2b6cb0;text-transform:uppercase;letter-spacing:2px}table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#2b6cb0;color:white;padding:9px 12px;text-align:left;font-size:12px}td{padding:9px 12px;border-bottom:1px solid #e2e8f0}.total-row td{background:#ebf8ff!important;font-weight:bold}.text-right{text-align:right}.sig-area{display:flex;justify-content:space-around;margin-top:60px}.sig-box{text-align:center;width:180px}.sig-line{border-top:1px solid #4a5568;padding-top:8px;margin-top:40px}</style></head><body><div class='header'><div><div class='logo'>ACME<span>.</span>corp</div><div style='font-size:11px;color:#718096'>EIN: 12-3456789 &mdash; 1234 Market Street, San Francisco, CA</div></div><div style='text-align:right'><div class='badge'>&#10003; APPROVED</div><div style='font-size:15px;font-weight:bold;color:#2b6cb0'>No. AUTH-2024-00847</div><div style='font-size:11px;color:#718096'>Issued: April 15, 2024</div></div></div><div class='doc-title'><h1>Electronic Purchase Authorization</h1><p style='font-size:11px;color:#718096'>Electronically generated document</p></div><table><tr><th colspan='2'>Requestor Details</th></tr><tr><td>Full name</td><td>John Carter</td></tr><tr><td>Title</td><td>Procurement Manager</td></tr><tr><td>Cost Center</td><td>CC-440 &mdash; Operations</td></tr></table><table><tr><th>No.</th><th>Description</th><th class='text-right'>Qty</th><th class='text-right'>Unit Price</th><th class='text-right'>Total</th></tr><tr><td>001</td><td>Dell XPS 15 Laptop</td><td class='text-right'>3</td><td class='text-right'>$1,299.99</td><td class='text-right'>$3,899.97</td></tr><tr><td>002</td><td>LG 27&rdquo; 4K Monitor</td><td class='text-right'>3</td><td class='text-right'>$449.99</td><td class='text-right'>$1,349.97</td></tr><tr><td>003</td><td>Logitech MK850 Wireless Kit</td><td class='text-right'>3</td><td class='text-right'>$59.99</td><td class='text-right'>$179.97</td></tr><tr class='total-row'><td colspan='4' class='text-right'>TOTAL (TAX INCLUDED)</td><td class='text-right'>$5,900.64</td></tr></table><div class='sig-area'><div class='sig-box'><div class='sig-line'><strong>John Carter</strong><br><span style='font-size:11px;color:#718096'>Requestor</span></div></div><div class='sig-box'><div class='sig-line'><strong>Sarah Mitchell</strong><br><span style='font-size:11px;color:#718096'>Finance</span></div></div><div class='sig-box'><div class='sig-line'><strong>Robert Chen</strong><br><span style='font-size:11px;color:#718096'>General Manager</span></div></div></div></body></html>\",\n  \"options\": {\n    \"printBackground\": true,\n    \"marginTop\": 0,\n    \"marginBottom\": 0,\n    \"marginLeft\": 0,\n    \"marginRight\": 0\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Autorización electrónica de compra: logo, tabla de ítems, flujo de aprobaciones, firmas."
+            "description": "Electronic purchase authorization: logo, items table, approval workflow, signature blocks."
           }
         },
         {
-          "name": "03 · Factura / Invoice",
+          "name": "03 · Invoice",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -94,14 +94,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}.inv-header{display:flex;justify-content:space-between;margin-bottom:36px}.brand{font-size:30px;font-weight:900;color:#e53e3e}.brand-sub{font-size:11px;color:#718096;margin-top:4px}.inv-label{font-size:30px;font-weight:900;color:#e53e3e;text-align:right}.inv-meta{text-align:right;font-size:12px;color:#4a5568;margin-top:4px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;background:#f7fafc;border:1px solid #e2e8f0;border-radius:6px;padding:18px;margin-bottom:28px}.info-box h3{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#718096;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin-bottom:8px}thead th{background:#1a202c;color:white;padding:10px 14px;text-align:left;font-size:12px}tbody td{padding:10px 14px;border-bottom:1px solid #e2e8f0}.totals-wrap{display:flex;justify-content:flex-end;margin:16px 0 32px}.totals{width:280px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}.totals table{margin:0}.totals td{padding:8px 14px;border-bottom:1px solid #e2e8f0}.grand td{background:#1a202c;color:white;font-weight:bold;font-size:14px;border:none}.text-right{text-align:right}.footer{text-align:center;font-size:10px;color:#a0aec0;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:32px}</style></head><body><div class='inv-header'><div><div class='brand'>ACME.</div><div class='brand-sub'>ACME Corp. SpA &mdash; RUT 76.123.456-7<br>Av. Providencia 1234, Santiago<br>facturacion@acme.cl</div></div><div><div class='inv-label'>FACTURA</div><div class='inv-meta'><strong>N&deg;</strong> 000847<br><strong>Fecha:</strong> 15/04/2024<br><strong>Vence:</strong> 15/05/2024</div></div></div><div class='info-grid'><div class='info-box'><h3>Facturar a</h3><strong>TechStart SpA</strong><br>RUT: 77.987.654-3<br>Av. Las Condes 4567, Santiago<br>finanzas@techstart.cl</div><div class='info-box'><h3>Referencia</h3><strong>Proyecto:</strong> E-commerce v2.0<br><strong>OC:</strong> OC-2024-00312<br><strong>Ejecutivo:</strong> Ana Martínez</div></div><table><thead><tr><th>Descripción</th><th class='text-right'>Cant.</th><th class='text-right'>Precio Unit.</th><th class='text-right'>Total</th></tr></thead><tbody><tr><td>Desarrollo de plataforma web</td><td class='text-right'>1</td><td class='text-right'>$2.000.000</td><td class='text-right'>$2.000.000</td></tr><tr><td>Diseño UI/UX</td><td class='text-right'>1</td><td class='text-right'>$800.000</td><td class='text-right'>$800.000</td></tr><tr><td>Consultoría técnica (10 hrs)</td><td class='text-right'>10</td><td class='text-right'>$75.000</td><td class='text-right'>$750.000</td></tr><tr><td>Hosting + dominio (1 año)</td><td class='text-right'>1</td><td class='text-right'>$150.000</td><td class='text-right'>$150.000</td></tr></tbody></table><div class='totals-wrap'><div class='totals'><table><tr><td>Subtotal</td><td class='text-right'>$3.700.000</td></tr><tr><td>IVA (19%)</td><td class='text-right'>$703.000</td></tr><tr class='grand'><td>TOTAL</td><td class='text-right'>$4.403.000</td></tr></table></div></div><div class='footer'>ACME Corp. SpA &mdash; RUT 76.123.456-7 &mdash; Factura N&deg; 000847</div></body></html>\",\n  \"options\": {\n    \"printBackground\": true\n  }\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}.inv-header{display:flex;justify-content:space-between;margin-bottom:36px}.brand{font-size:30px;font-weight:900;color:#e53e3e}.brand-sub{font-size:11px;color:#718096;margin-top:4px}.inv-label{font-size:30px;font-weight:900;color:#e53e3e;text-align:right}.inv-meta{text-align:right;font-size:12px;color:#4a5568;margin-top:4px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;background:#f7fafc;border:1px solid #e2e8f0;border-radius:6px;padding:18px;margin-bottom:28px}.info-box h3{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#718096;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin-bottom:8px}thead th{background:#1a202c;color:white;padding:10px 14px;text-align:left;font-size:12px}tbody td{padding:10px 14px;border-bottom:1px solid #e2e8f0}.totals-wrap{display:flex;justify-content:flex-end;margin:16px 0 32px}.totals{width:280px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}.totals table{margin:0}.totals td{padding:8px 14px;border-bottom:1px solid #e2e8f0}.grand td{background:#1a202c;color:white;font-weight:bold;font-size:14px;border:none}.text-right{text-align:right}.footer{text-align:center;font-size:10px;color:#a0aec0;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:32px}</style></head><body><div class='inv-header'><div><div class='brand'>ACME.</div><div class='brand-sub'>ACME Corp. &mdash; EIN 12-3456789<br>1234 Market Street, San Francisco, CA<br>billing@acme.example</div></div><div><div class='inv-label'>INVOICE</div><div class='inv-meta'><strong>No.</strong> 000847<br><strong>Date:</strong> 04/15/2024<br><strong>Due:</strong> 05/15/2024</div></div></div><div class='info-grid'><div class='info-box'><h3>Bill To</h3><strong>TechStart Inc.</strong><br>EIN: 98-7654321<br>456 Innovation Drive, Austin, TX<br>finance@techstart.example</div><div class='info-box'><h3>Reference</h3><strong>Project:</strong> E-Commerce Platform v2.0<br><strong>PO:</strong> PO-2024-00312<br><strong>Account Manager:</strong> Anna Martinez</div></div><table><thead><tr><th>Description</th><th class='text-right'>Qty</th><th class='text-right'>Unit Price</th><th class='text-right'>Total</th></tr></thead><tbody><tr><td>Web platform development</td><td class='text-right'>1</td><td class='text-right'>$12,000.00</td><td class='text-right'>$12,000.00</td></tr><tr><td>UI/UX Design</td><td class='text-right'>1</td><td class='text-right'>$4,800.00</td><td class='text-right'>$4,800.00</td></tr><tr><td>Technical consulting (10 hrs)</td><td class='text-right'>10</td><td class='text-right'>$150.00</td><td class='text-right'>$1,500.00</td></tr><tr><td>Cloud hosting + domain (1 year)</td><td class='text-right'>1</td><td class='text-right'>$960.00</td><td class='text-right'>$960.00</td></tr></tbody></table><div class='totals-wrap'><div class='totals'><table><tr><td>Subtotal</td><td class='text-right'>$19,260.00</td></tr><tr><td>Tax (8.5%)</td><td class='text-right'>$1,637.10</td></tr><tr class='grand'><td>AMOUNT DUE</td><td class='text-right'>$20,897.10</td></tr></table></div></div><div class='footer'>ACME Corp. &mdash; EIN 12-3456789 &mdash; Invoice No. 000847</div></body></html>\",\n  \"options\": {\n    \"printBackground\": true\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Factura completa: empresa, cliente, tabla de servicios, subtotal + IVA + total."
+            "description": "Full invoice: company, client, services table, subtotal + tax + total."
           }
         },
         {
-          "name": "04 · Landscape + fondo de color",
+          "name": "04 · Landscape + color background",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -110,14 +110,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;margin:0;padding:40px;background:#1a202c;color:white}h1{color:#63b3ed;font-size:28px;margin-bottom:8px}p{color:#a0aec0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}.card{background:#2d3748;border-radius:8px;padding:24px;border-left:4px solid #63b3ed}.card h3{color:#63b3ed;margin-bottom:8px}.card .val{font-size:28px;font-weight:900}.card .sub{color:#718096;font-size:12px;margin-top:4px}</style></head><body><h1>Dashboard Ejecutivo Q1 2024</h1><p>Reporte generado el 15 de abril de 2024 &mdash; Landscape con fondo oscuro</p><div class='grid'><div class='card'><h3>Ingresos</h3><div class='val'>$48.2M</div><div class='sub'>+12.4% vs Q4 2023</div></div><div class='card'><h3>Clientes</h3><div class='val'>1.847</div><div class='sub'>+8.1% nuevos</div></div><div class='card'><h3>NPS</h3><div class='val'>72</div><div class='sub'>+5 puntos</div></div><div class='card'><h3>Ticket Promedio</h3><div class='val'>$26.1K</div><div class='sub'>+3.8%</div></div><div class='card'><h3>Conversión</h3><div class='val'>8.4%</div><div class='sub'>+1.2pp</div></div><div class='card'><h3>Churn</h3><div class='val'>1.2%</div><div class='sub'>−0.4pp</div></div></div></body></html>\",\n  \"options\": {\n    \"landscape\": true,\n    \"printBackground\": true,\n    \"marginTop\": 0.5,\n    \"marginBottom\": 0.5,\n    \"marginLeft\": 0.5,\n    \"marginRight\": 0.5\n  }\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;margin:0;padding:40px;background:#1a202c;color:white}h1{color:#63b3ed;font-size:28px;margin-bottom:8px}p{color:#a0aec0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}.card{background:#2d3748;border-radius:8px;padding:24px;border-left:4px solid #63b3ed}.card h3{color:#63b3ed;margin-bottom:8px}.card .val{font-size:28px;font-weight:900}.card .sub{color:#718096;font-size:12px;margin-top:4px}</style></head><body><h1>Executive Dashboard Q1 2024</h1><p>Report generated on April 15, 2024 &mdash; Landscape with dark background</p><div class='grid'><div class='card'><h3>Revenue</h3><div class='val'>$48.2M</div><div class='sub'>+12.4% vs Q4 2023</div></div><div class='card'><h3>Customers</h3><div class='val'>1,847</div><div class='sub'>+8.1% new</div></div><div class='card'><h3>NPS</h3><div class='val'>72</div><div class='sub'>+5 points</div></div><div class='card'><h3>Avg. Ticket</h3><div class='val'>$26.1K</div><div class='sub'>+3.8%</div></div><div class='card'><h3>Conversion</h3><div class='val'>8.4%</div><div class='sub'>+1.2pp</div></div><div class='card'><h3>Churn</h3><div class='val'>1.2%</div><div class='sub'>−0.4pp</div></div></div></body></html>\",\n  \"options\": {\n    \"landscape\": true,\n    \"printBackground\": true,\n    \"marginTop\": 0.5,\n    \"marginBottom\": 0.5,\n    \"marginLeft\": 0.5,\n    \"marginRight\": 0.5\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Dashboard en orientación horizontal con fondo oscuro. Requiere `printBackground: true` para que Chrome imprima el fondo."
+            "description": "Dashboard in landscape orientation with dark background. Requires `printBackground: true` for Chrome to render the background color."
           }
         },
         {
-          "name": "05 · Con header y footer",
+          "name": "05 · Header and footer",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -126,14 +126,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px;color:#333}h1{color:#2b6cb0}p{margin:12px 0;line-height:1.6}</style></head><body><h1>Documento con Header y Footer</h1><p>Este documento tiene encabezado y pie de página configurados via opciones de PDF.</p><p>El header muestra el título del documento y la fecha. El footer muestra el número de página y el total de páginas.</p><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p></body></html>\",\n  \"options\": {\n    \"displayHeaderFooter\": true,\n    \"headerTemplate\": \"<div style='width:100%;font-size:9px;font-family:Arial,sans-serif;padding:4px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#718096'><span>ACME Corp. &mdash; Documento Confidencial</span><span class='date'></span></div>\",\n    \"footerTemplate\": \"<div style='width:100%;font-size:9px;font-family:Arial,sans-serif;padding:4px 24px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#718096'><span>gopress &mdash; generado automáticamente</span><span>Página <span class='pageNumber'></span> de <span class='totalPages'></span></span></div>\",\n    \"marginTop\": 0.8,\n    \"marginBottom\": 0.8\n  }\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px;color:#333}h1{color:#2b6cb0}p{margin:12px 0;line-height:1.6}</style></head><body><h1>Document with Header and Footer</h1><p>This document has a header and footer configured via PDF options.</p><p>The header shows the document title and the current date. The footer shows the page number and total pages.</p><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p></body></html>\",\n  \"options\": {\n    \"displayHeaderFooter\": true,\n    \"headerTemplate\": \"<div style='width:100%;font-size:9px;font-family:Arial,sans-serif;padding:4px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#718096'><span>ACME Corp. &mdash; Confidential</span><span class='date'></span></div>\",\n    \"footerTemplate\": \"<div style='width:100%;font-size:9px;font-family:Arial,sans-serif;padding:4px 24px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#718096'><span>gopress &mdash; auto-generated</span><span>Page <span class='pageNumber'></span> of <span class='totalPages'></span></span></div>\",\n    \"marginTop\": 0.8,\n    \"marginBottom\": 0.8\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Demuestra `displayHeaderFooter` con placeholders de Chrome:\n- `<span class='date'>` → fecha actual\n- `<span class='pageNumber'>` → página actual\n- `<span class='totalPages'>` → total páginas\n- `<span class='title'>` → title del HTML\n- `<span class='url'>` → URL del documento"
+            "description": "Demonstrates `displayHeaderFooter` with Chrome placeholders:\n- `<span class='date'>` → current date\n- `<span class='pageNumber'>` → current page\n- `<span class='totalPages'>` → total pages\n- `<span class='title'>` → document title\n- `<span class='url'>` → document URL"
           }
         },
         {
-          "name": "06 · Solo páginas 1-2 (pageRanges)",
+          "name": "06 · Pages 1-2 only (pageRanges)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -142,14 +142,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px}.page{page-break-after:always;min-height:800px;padding:20px;border:1px solid #e2e8f0;margin-bottom:20px}h2{color:#2b6cb0}</style></head><body><div class='page'><h2>Página 1 &mdash; Introducción</h2><p>Esta es la primera página del documento.</p></div><div class='page'><h2>Página 2 &mdash; Datos</h2><p>Esta es la segunda página.</p></div><div class='page'><h2>Página 3 &mdash; Conclusión</h2><p>Esta página NO será incluida en el PDF gracias a pageRanges.</p></div></body></html>\",\n  \"options\": {\n    \"pageRanges\": \"1-2\"\n  }\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px}.page{page-break-after:always;min-height:800px;padding:20px;border:1px solid #e2e8f0;margin-bottom:20px}h2{color:#2b6cb0}</style></head><body><div class='page'><h2>Page 1 &mdash; Introduction</h2><p>This is the first page of the document.</p></div><div class='page'><h2>Page 2 &mdash; Data</h2><p>This is the second page.</p></div><div class='page'><h2>Page 3 &mdash; Conclusion</h2><p>This page will NOT be included in the PDF thanks to pageRanges.</p></div></body></html>\",\n  \"options\": {\n    \"pageRanges\": \"1-2\"\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Imprime solo las páginas 1 y 2 de un documento de 3 páginas. Útil para extraer secciones específicas."
+            "description": "Prints only pages 1 and 2 of a 3-page document. Useful for extracting specific sections."
           }
         },
         {
-          "name": "07 · Tamaño A4 personalizado",
+          "name": "07 · Custom A4 size",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -158,20 +158,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px;color:#333}h1{color:#2b6cb0}</style></head><body><h1>Documento A4 exacto</h1><p>Ancho: 8.27 pulgadas &mdash; Alto: 11.69 pulgadas (A4 estándar).</p><p>Los márgenes están en pulgadas. 1 pulgada = 2.54 cm.</p></body></html>\",\n  \"options\": {\n    \"paperWidth\": 8.27,\n    \"paperHeight\": 11.69,\n    \"marginTop\": 1.0,\n    \"marginBottom\": 1.0,\n    \"marginLeft\": 1.18,\n    \"marginRight\": 1.18,\n    \"printBackground\": true\n  }\n}",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:40px;color:#333}h1{color:#2b6cb0}</style></head><body><h1>Exact A4 Document</h1><p>Width: 8.27 inches &mdash; Height: 11.69 inches (standard A4).</p><p>Margins are specified in inches. 1 inch = 2.54 cm.</p></body></html>\",\n  \"options\": {\n    \"paperWidth\": 8.27,\n    \"paperHeight\": 11.69,\n    \"marginTop\": 1.0,\n    \"marginBottom\": 1.0,\n    \"marginLeft\": 1.18,\n    \"marginRight\": 1.18,\n    \"printBackground\": true\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Tamaño A4 explícito en pulgadas. Referencia de tamaños comunes:\n- A4: 8.27 × 11.69\n- Letter: 8.5 × 11\n- Legal: 8.5 × 14\n- A3: 11.69 × 16.54"
+            "description": "Explicit A4 size in inches. Common paper size reference:\n- A4: 8.27 × 11.69\n- Letter: 8.5 × 11\n- Legal: 8.5 × 14\n- A3: 11.69 × 16.54"
           }
         }
       ]
     },
     {
-      "name": "POST /pdf — Multipart (con archivos)",
-      "description": "Convierte HTML a PDF enviando `multipart/form-data`.\nNecesario cuando el HTML referencia assets externos (CSS, imágenes, fuentes).\n\n**Antes de usar:** configura la variable `examples_dir` con la ruta absoluta a la carpeta `postman/examples` del repositorio.\n\nCampos soportados:\n- `index.html` — HTML principal (requerido)\n- cualquier asset (`style.css`, `logo.png`, etc.) — accesibles desde el HTML\n- `options.json` — opciones PDF (opcional)",
+      "name": "POST /pdf — Multipart (with files)",
+      "description": "Convert HTML to PDF using `multipart/form-data`.\nRequired when the HTML references external assets (CSS, images, fonts).\n\n**Before using:** set the `examples_dir` variable to the absolute path of the `postman/examples` folder in this repository.\n\nSupported fields:\n- `index.html` — main HTML file (required)\n- any asset (`style.css`, `logo.png`, etc.) — accessible from the HTML\n- `options.json` — PDF options (optional)",
       "item": [
         {
-          "name": "08 · HTML desde archivo",
+          "name": "08 · HTML from file",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -182,15 +182,15 @@
                   "key": "index.html",
                   "type": "file",
                   "src": "{{examples_dir}}/02_autorizacion.html",
-                  "description": "Archivo HTML principal — ajusta la ruta en la variable examples_dir"
+                  "description": "Main HTML file — adjust the path in the examples_dir variable"
                 }
               ]
             },
-            "description": "Envía el archivo `02_autorizacion.html` directamente como multipart.\nEquivalente curl:\n```bash\ncurl -X POST {{base_url}}/pdf -F \"index.html=@02_autorizacion.html\" --output out.pdf\n```"
+            "description": "Sends `02_autorizacion.html` directly as multipart.\nEquivalent curl:\n```bash\ncurl -X POST {{base_url}}/pdf -F \"index.html=@02_autorizacion.html\" --output out.pdf\n```"
           }
         },
         {
-          "name": "09 · HTML + CSS (reporte con stylesheet)",
+          "name": "09 · HTML + CSS (report with stylesheet)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -201,17 +201,17 @@
                   "key": "index.html",
                   "type": "file",
                   "src": "{{examples_dir}}/04_multipart/index.html",
-                  "description": "HTML que referencia style.css con <link rel='stylesheet' href='style.css'>"
+                  "description": "HTML that references style.css with <link rel='stylesheet' href='style.css'>"
                 },
                 {
                   "key": "style.css",
                   "type": "file",
                   "src": "{{examples_dir}}/04_multipart/style.css",
-                  "description": "Hoja de estilos externa"
+                  "description": "External stylesheet"
                 }
               ]
             },
-            "description": "Reporte trimestral con CSS externo. El servidor levanta un HTTP local y resuelve `href='style.css'` automáticamente.\n\nEquivalente curl:\n```bash\ncurl -X POST {{base_url}}/pdf \\\n  -F \"index.html=@04_multipart/index.html\" \\\n  -F \"style.css=@04_multipart/style.css\" \\\n  --output reporte.pdf\n```"
+            "description": "Quarterly report with external CSS. The server spins up a local HTTP server and resolves `href='style.css'` automatically.\n\nEquivalent curl:\n```bash\ncurl -X POST {{base_url}}/pdf \\\n  -F \"index.html=@04_multipart/index.html\" \\\n  -F \"style.css=@04_multipart/style.css\" \\\n  --output report.pdf\n```"
           }
         },
         {
@@ -236,11 +236,11 @@
                   "key": "options.json",
                   "type": "file",
                   "src": "{{examples_dir}}/04_multipart/options.json",
-                  "description": "Opciones PDF: printBackground, márgenes, etc."
+                  "description": "PDF options: printBackground, margins, etc."
                 }
               ]
             },
-            "description": "Reporte completo con CSS y opciones de PDF. El `options.json` permite configurar márgenes, landscape, header/footer, etc.\n\nContenido de options.json de este ejemplo:\n```json\n{\n  \"printBackground\": true,\n  \"marginTop\": 0.6,\n  \"marginBottom\": 0.6,\n  \"marginLeft\": 0.6,\n  \"marginRight\": 0.6\n}\n```"
+            "description": "Full report with CSS and PDF options. The `options.json` configures margins, landscape, header/footer, etc.\n\nContents of this example's options.json:\n```json\n{\n  \"printBackground\": true,\n  \"marginTop\": 0.6,\n  \"marginBottom\": 0.6,\n  \"marginLeft\": 0.6,\n  \"marginRight\": 0.6\n}\n```"
           }
         }
       ]

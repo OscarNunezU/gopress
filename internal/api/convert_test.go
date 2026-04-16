@@ -270,3 +270,106 @@ func TestConvertHandlerInvalidMultipart(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
+
+// ---- JSON path tests ----
+
+func TestParseJSONValid(t *testing.T) {
+	body := bytes.NewBufferString(`{"html":"<h1>hello</h1>"}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+
+	html, opts, err := parseJSON(r)
+	if err != nil {
+		t.Fatalf("parseJSON: %v", err)
+	}
+	if html != "<h1>hello</h1>" {
+		t.Errorf("html = %q, want <h1>hello</h1>", html)
+	}
+	if opts.Landscape {
+		t.Error("expected landscape false")
+	}
+}
+
+func TestParseJSONWithOptions(t *testing.T) {
+	body := bytes.NewBufferString(`{"html":"<p>test</p>","options":{"landscape":true,"paperWidth":8.5}}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, opts, err := parseJSON(r)
+	if err != nil {
+		t.Fatalf("parseJSON: %v", err)
+	}
+	if !opts.Landscape {
+		t.Error("opts.Landscape = false, want true")
+	}
+	if opts.PaperWidth != 8.5 {
+		t.Errorf("opts.PaperWidth = %v, want 8.5", opts.PaperWidth)
+	}
+}
+
+func TestParseJSONMissingHTML(t *testing.T) {
+	body := bytes.NewBufferString(`{"options":{"landscape":true}}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, _, err := parseJSON(r)
+	if !errors.Is(err, errMissingHTML) {
+		t.Errorf("error = %v, want errMissingHTML", err)
+	}
+}
+
+func TestParseJSONInvalidBody(t *testing.T) {
+	body := bytes.NewBufferString(`{not valid json}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, _, err := parseJSON(r)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+}
+
+func TestConvertHandlerJSONSuccess(t *testing.T) {
+	fakePDF := []byte("%PDF-1.4 fake")
+	conv := &mockConverter{pdfData: fakePDF}
+
+	body := bytes.NewBufferString(`{"html":"<h1>hello</h1>"}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	convertHandler(conv, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("Content-Type = %q, want application/pdf", ct)
+	}
+}
+
+func TestConvertHandlerJSONMissingHTML(t *testing.T) {
+	body := bytes.NewBufferString(`{}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	convertHandler(&mockConverter{}, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestConvertHandlerJSONInvalid(t *testing.T) {
+	body := bytes.NewBufferString(`{not json}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	convertHandler(&mockConverter{}, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}

@@ -121,6 +121,15 @@ WORKDIR /home/gopress
 
 EXPOSE 3000
 
+# OCI image labels — static metadata baked at build time.
+# Dynamic fields (version, revision, created) are injected by docker/metadata-action in CI.
+LABEL org.opencontainers.image.title="gopress" \
+      org.opencontainers.image.description="HTML to PDF microservice powered by headless Chrome and CDP" \
+      org.opencontainers.image.url="https://github.com/OscarNunezU/gopress" \
+      org.opencontainers.image.source="https://github.com/OscarNunezU/gopress" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="gopress"
+
 # Uses the gopress binary itself as the health probe — no extra tooling needed.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD ["/usr/bin/gopress", "--healthcheck"]

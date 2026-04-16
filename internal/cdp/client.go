@@ -58,7 +58,7 @@ func Dial(ctx context.Context, wsURL string, logger *slog.Logger) (*Client, erro
 	// if the upgrade response and first frame arrive in the same TCP segment.
 	br := bufio.NewReader(conn)
 	if err := wsHandshake(conn, br, u); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("ws handshake: %w", err)
 	}
 
@@ -406,7 +406,7 @@ func wsHandshake(conn net.Conn, br *bufio.Reader, u *url.URL) error {
 	if err != nil {
 		return fmt.Errorf("read handshake response: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)

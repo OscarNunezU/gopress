@@ -28,3 +28,6 @@ Thumbs.db
 *.out
 *.test
 coverage.html
+
+# Generated PDFs
+postman/output/

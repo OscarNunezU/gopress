@@ -177,7 +177,7 @@ func dialBrowser(ctx context.Context, port int, logger *slog.Logger) (*cdp.Clien
 	if err != nil {
 		return nil, fmt.Errorf("get /json/version: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	var info struct {
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
@@ -227,11 +227,11 @@ func (i *Instance) convertWithAssets(ctx context.Context, session cdp.Sender, jo
 		files[name] = data
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx
 	if err != nil {
 		return fmt.Errorf("asset server listen: %w", err)
 	}
-	port := ln.Addr().(*net.TCPAddr).Port
+	port := ln.Addr().(*net.TCPAddr).Port //nolint:errcheck
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +258,7 @@ func (i *Instance) convertWithAssets(ctx context.Context, session cdp.Sender, jo
 		WriteTimeout: 10 * time.Second,
 	}
 	go srv.Serve(ln) //nolint:errcheck
-	defer srv.Close()
+	defer srv.Close() //nolint:errcheck
 
 	// Subscribe BEFORE navigating — avoids the race condition.
 	loadCh := session.Subscribe("Page.loadEventFired")

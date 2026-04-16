@@ -64,7 +64,8 @@ docker-push-base: ## Push the Chrome base image to GHCR
 docker-build: ## Build the gopress Docker image
 	docker build \
 		--build-arg VERSION=$(VERSION) \
-		--build-arg CHROME_BASE_IMAGE=$(BASE_IMAGE) \
+		--build-arg CHROME_VERSION=$(CHROME_VERSION) \
+		--build-arg CHROME_SHA256=$(CHROME_SHA256) \
 		--build-arg DEBIAN_SNAPSHOT=$(DEBIAN_SNAPSHOT) \
 		-t $(DOCKER_REPO):$(VERSION) \
 		-f $(DOCKERFILE) .

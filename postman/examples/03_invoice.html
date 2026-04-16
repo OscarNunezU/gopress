@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; padding: 48px; color: #1a202c; font-size: 13px; }
+
+    .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; }
+    .brand { font-size: 30px; font-weight: 900; color: #e53e3e; letter-spacing: -1px; }
+    .brand-sub { font-size: 11px; color: #718096; margin-top: 4px; }
+    .invoice-label { font-size: 32px; font-weight: 900; color: #e53e3e; text-align: right; }
+    .invoice-meta { text-align: right; font-size: 12px; color: #4a5568; margin-top: 4px; }
+    .invoice-meta strong { color: #1a202c; }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin-bottom: 32px; }
+    .info-box h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #718096; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; }
+    .info-box p { line-height: 1.7; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    thead th { background: #1a202c; color: white; padding: 10px 14px; text-align: left; font-size: 12px; }
+    tbody td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; }
+    tbody tr:hover td { background: #f7fafc; }
+
+    .totals-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; margin-bottom: 40px; }
+    .totals { width: 300px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+    .totals table { margin: 0; }
+    .totals td { padding: 8px 16px; border-bottom: 1px solid #e2e8f0; }
+    .totals .grand td { background: #1a202c; color: white; font-weight: bold; font-size: 15px; border: none; }
+
+    .payment-box { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 16px 20px; margin-bottom: 32px; }
+    .payment-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #2b6cb0; margin-bottom: 8px; }
+    .payment-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; font-size: 12px; }
+    .payment-grid div span { display: block; font-size: 10px; color: #718096; margin-bottom: 2px; }
+
+    .footer { text-align: center; font-size: 10px; color: #a0aec0; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+    .text-right { text-align: right; }
+    .status { display: inline-block; background: #fed7d7; color: #c53030; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="invoice-header">
+    <div>
+      <div class="brand">ACME.</div>
+      <div class="brand-sub">
+        ACME Corp. SpA — RUT 76.123.456-7<br>
+        Av. Providencia 1234, Of. 501, Santiago<br>
+        facturacion@acme.cl
+      </div>
+    </div>
+    <div>
+      <div class="invoice-label">FACTURA</div>
+      <div class="invoice-meta">
+        <strong>N°</strong> 000847<br>
+        <strong>Fecha emisión:</strong> 15/04/2024<br>
+        <strong>Vencimiento:</strong> 15/05/2024<br>
+        <strong>Estado:</strong> <span class="status">PENDIENTE</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <h3>Facturar a</h3>
+      <p>
+        <strong>TechStart SpA</strong><br>
+        RUT: 77.987.654-3<br>
+        Av. Las Condes 4567, Of. 201<br>
+        Las Condes, Santiago<br>
+        finanzas@techstart.cl<br>
+        +56 9 8765 4321
+      </p>
+    </div>
+    <div class="info-box">
+      <h3>Referencia del Proyecto</h3>
+      <p>
+        <strong>Proyecto:</strong> Plataforma E-commerce v2.0<br>
+        <strong>Orden de Compra:</strong> OC-2024-00312<br>
+        <strong>Contrato:</strong> CONT-2024-089<br>
+        <strong>Ejecutivo:</strong> Ana Martínez<br>
+        <strong>Período:</strong> Enero — Abril 2024
+      </p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:5%">N°</th>
+        <th>Descripción</th>
+        <th style="width:10%">Unidad</th>
+        <th class="text-right" style="width:8%">Cant.</th>
+        <th class="text-right" style="width:14%">Precio Unit.</th>
+        <th class="text-right" style="width:14%">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Desarrollo de plataforma web (frontend + backend)</td>
+        <td>proyecto</td>
+        <td class="text-right">1</td>
+        <td class="text-right">$2.000.000</td>
+        <td class="text-right">$2.000.000</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Diseño UI/UX — wireframes, prototipos y assets finales</td>
+        <td>proyecto</td>
+        <td class="text-right">1</td>
+        <td class="text-right">$800.000</td>
+        <td class="text-right">$800.000</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Consultoría técnica y reuniones de seguimiento</td>
+        <td>hora</td>
+        <td class="text-right">10</td>
+        <td class="text-right">$75.000</td>
+        <td class="text-right">$750.000</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>Hosting cloud + dominio + certificado SSL (1 año)</td>
+        <td>año</td>
+        <td class="text-right">1</td>
+        <td class="text-right">$150.000</td>
+        <td class="text-right">$150.000</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Capacitación equipo cliente (4 sesiones)</td>
+        <td>sesión</td>
+        <td class="text-right">4</td>
+        <td class="text-right">$50.000</td>
+        <td class="text-right">$200.000</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="totals-wrapper">
+    <div class="totals">
+      <table>
+        <tr><td>Subtotal neto</td><td class="text-right">$3.900.000</td></tr>
+        <tr><td>Descuento (5%)</td><td class="text-right">−$195.000</td></tr>
+        <tr><td>Base imponible</td><td class="text-right">$3.705.000</td></tr>
+        <tr><td>IVA (19%)</td><td class="text-right">$703.950</td></tr>
+        <tr class="grand"><td>TOTAL A PAGAR</td><td class="text-right">$4.408.950</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="payment-box">
+    <h3>Instrucciones de Pago</h3>
+    <div class="payment-grid">
+      <div><span>Banco</span>BancoEstado</div>
+      <div><span>Tipo de cuenta</span>Cuenta Corriente</div>
+      <div><span>N° de cuenta</span>00123-456-789</div>
+      <div><span>Beneficiario</span>ACME Corp. SpA</div>
+      <div><span>RUT beneficiario</span>76.123.456-7</div>
+      <div><span>Referencia</span>FAC-000847</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    ACME Corp. SpA — RUT 76.123.456-7 — Resolución SII N° 112 del 01/01/2020<br>
+    Verifique este documento en mipyme.sii.cl — Factura N° 000847
+  </div>
+
+</body>
+</html>

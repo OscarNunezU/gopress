@@ -14,31 +14,56 @@ import (
 	"github.com/OscarNunezU/gopress/internal/browser"
 )
 
-// maxUploadBytes is the hard limit on multipart request body size (64 MiB).
+// maxUploadBytes is the hard limit on request body size (64 MiB).
 const maxUploadBytes = 64 << 20
 
-// errMissingHTML is returned when the multipart form has no index.html field.
-var errMissingHTML = errors.New("index.html is required")
+// errMissingHTML is returned when the request has no HTML content.
+var errMissingHTML = errors.New("html is required")
+
+// jsonRequest is the body schema for application/json requests.
+type jsonRequest struct {
+	HTML    string            `json:"html"`
+	Options *browser.PDFOptions `json:"options,omitempty"`
+}
 
 // convertHandler handles POST /pdf.
-// Accepts multipart/form-data with:
-//   - index.html (required)
-//   - any number of asset files (CSS, images, fonts, etc.)
-//   - options.json (optional PDF options)
+//
+// Accepts two content types:
+//
+//  1. application/json — simple HTML-only requests:
+//     {"html": "<h1>Hello</h1>", "options": {...}}
+//
+//  2. multipart/form-data — HTML with assets (CSS, images, fonts):
+//     index.html (required), any asset files, options.json (optional)
 func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-		if err := r.ParseMultipartForm(32 << 20); err != nil {
-			var maxErr *http.MaxBytesError
-			if errors.As(err, &maxErr) {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+
+		var (
+			html   string
+			assets map[string][]byte
+			opts   browser.PDFOptions
+			err    error
+		)
+
+		ct := r.Header.Get("Content-Type")
+		switch {
+		case strings.HasPrefix(ct, "application/json"):
+			html, opts, err = parseJSON(r)
+			assets = map[string][]byte{}
+		default:
+			if err = r.ParseMultipartForm(32 << 20); err != nil {
+				var maxErr *http.MaxBytesError
+				if errors.As(err, &maxErr) {
+					http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+					return
+				}
+				http.Error(w, "invalid multipart form", http.StatusBadRequest)
 				return
 			}
-			http.Error(w, "invalid multipart form", http.StatusBadRequest)
-			return
+			html, assets, opts, err = parseForm(r)
 		}
 
-		html, assets, opts, err := parseForm(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -64,6 +89,20 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdf)
 	})
+}
+
+func parseJSON(r *http.Request) (html string, opts browser.PDFOptions, err error) {
+	var req jsonRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return "", opts, fmt.Errorf("invalid JSON: %w", err)
+	}
+	if req.HTML == "" {
+		return "", opts, errMissingHTML
+	}
+	if req.Options != nil {
+		opts = *req.Options
+	}
+	return req.HTML, opts, nil
 }
 
 func parseForm(r *http.Request) (html string, assets map[string][]byte, opts browser.PDFOptions, err error) {

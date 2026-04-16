@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; padding: 48px; color: #1a202c; font-size: 13px; }
+
+    /* Header */
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 3px solid #2b6cb0; margin-bottom: 28px; }
+    .logo { font-size: 26px; font-weight: 900; color: #2b6cb0; letter-spacing: -1px; }
+    .logo span { color: #e53e3e; }
+    .company-info { font-size: 11px; color: #718096; margin-top: 4px; }
+    .doc-meta { text-align: right; }
+    .doc-meta .badge { display: inline-block; background: #276749; color: white; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; }
+    .doc-meta .doc-number { font-size: 15px; font-weight: bold; color: #2b6cb0; }
+    .doc-meta .doc-date { font-size: 11px; color: #718096; margin-top: 2px; }
+
+    /* Title */
+    .doc-title { text-align: center; margin-bottom: 28px; }
+    .doc-title h1 { font-size: 18px; color: #2b6cb0; text-transform: uppercase; letter-spacing: 2px; }
+    .doc-title p { font-size: 11px; color: #718096; margin-top: 4px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    table caption { text-align: left; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #4a5568; background: #edf2f7; padding: 8px 12px; border-left: 4px solid #2b6cb0; margin-bottom: 0; }
+    th { background: #2b6cb0; color: white; padding: 9px 12px; text-align: left; font-size: 12px; }
+    td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; }
+    tr:nth-child(even) td { background: #f7fafc; }
+    .total-row td { background: #ebf8ff !important; font-weight: bold; border-top: 2px solid #2b6cb0; }
+    .text-right { text-align: right; }
+    .badge-sm { display: inline-block; background: #276749; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; }
+
+    /* Signatures */
+    .signatures { display: flex; justify-content: space-around; margin-top: 60px; }
+    .sig-box { text-align: center; width: 180px; }
+    .sig-line { border-top: 1px solid #4a5568; padding-top: 8px; margin-top: 40px; }
+    .sig-name { font-weight: bold; font-size: 12px; }
+    .sig-role { font-size: 11px; color: #718096; }
+
+    /* Footer */
+    .footer { margin-top: 48px; padding-top: 12px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #a0aec0; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <div class="logo">ACME<span>.</span>corp</div>
+      <div class="company-info">
+        RUT: 76.123.456-7<br>
+        Av. Providencia 1234, Of. 501 — Santiago, Chile<br>
+        contacto@acme.cl — +56 2 2345 6789
+      </div>
+    </div>
+    <div class="doc-meta">
+      <div class="badge">&#10003; AUTORIZADO</div>
+      <div class="doc-number">N° AUT-2024-00847</div>
+      <div class="doc-date">Emitido: 15 de abril de 2024</div>
+      <div class="doc-date">Válido hasta: 15 de mayo de 2024</div>
+    </div>
+  </div>
+
+  <div class="doc-title">
+    <h1>Autorización Electrónica de Compra</h1>
+    <p>Documento generado electrónicamente — no requiere firma física</p>
+  </div>
+
+  <table>
+    <caption>Datos del Solicitante</caption>
+    <tr><th style="width:35%">Campo</th><th>Valor</th></tr>
+    <tr><td>Nombre completo</td><td>Juan Carlos Pérez González</td></tr>
+    <tr><td>RUT</td><td>12.345.678-9</td></tr>
+    <tr><td>Cargo</td><td>Jefe de Abastecimiento</td></tr>
+    <tr><td>Departamento</td><td>Operaciones y Logística</td></tr>
+    <tr><td>Centro de Costo</td><td>CC-440 — Operaciones</td></tr>
+    <tr><td>Correo</td><td>jperez@acme.cl</td></tr>
+  </table>
+
+  <table>
+    <caption>Detalle de Ítems Autorizados</caption>
+    <tr>
+      <th>N°</th>
+      <th>Descripción</th>
+      <th>Unidad</th>
+      <th class="text-right">Cant.</th>
+      <th class="text-right">Precio Unit.</th>
+      <th class="text-right">Total</th>
+    </tr>
+    <tr>
+      <td>001</td>
+      <td>Laptop Dell XPS 15 — 32GB RAM, 1TB SSD</td>
+      <td>unidad</td>
+      <td class="text-right">3</td>
+      <td class="text-right">$1.299.990</td>
+      <td class="text-right">$3.899.970</td>
+    </tr>
+    <tr>
+      <td>002</td>
+      <td>Monitor LG 27" 4K IPS — Panel antireflejos</td>
+      <td>unidad</td>
+      <td class="text-right">3</td>
+      <td class="text-right">$449.990</td>
+      <td class="text-right">$1.349.970</td>
+    </tr>
+    <tr>
+      <td>003</td>
+      <td>Kit teclado + mouse inalámbrico Logitech MK850</td>
+      <td>kit</td>
+      <td class="text-right">3</td>
+      <td class="text-right">$59.990</td>
+      <td class="text-right">$179.970</td>
+    </tr>
+    <tr>
+      <td>004</td>
+      <td>Licencia Microsoft 365 Business Standard (1 año)</td>
+      <td>licencia</td>
+      <td class="text-right">3</td>
+      <td class="text-right">$89.990</td>
+      <td class="text-right">$269.970</td>
+    </tr>
+    <tr>
+      <td>005</td>
+      <td>Soporte técnico instalación y configuración</td>
+      <td>hora</td>
+      <td class="text-right">8</td>
+      <td class="text-right">$25.000</td>
+      <td class="text-right">$200.000</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="5" class="text-right">TOTAL NETO</td>
+      <td class="text-right">$5.461.244</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="5" class="text-right">IVA (19%)</td>
+      <td class="text-right">$1.037.636</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="5" class="text-right">TOTAL IVA INCLUIDO</td>
+      <td class="text-right">$6.498.880</td>
+    </tr>
+  </table>
+
+  <table>
+    <caption>Flujo de Aprobaciones</caption>
+    <tr><th>Etapa</th><th>Responsable</th><th>Fecha</th><th>Estado</th></tr>
+    <tr>
+      <td>Solicitud</td>
+      <td>Juan C. Pérez — Abastecimiento</td>
+      <td>14/04/2024 09:15</td>
+      <td><span class="badge-sm">Aprobado</span></td>
+    </tr>
+    <tr>
+      <td>Revisión Financiera</td>
+      <td>María López — Finanzas</td>
+      <td>14/04/2024 14:30</td>
+      <td><span class="badge-sm">Aprobado</span></td>
+    </tr>
+    <tr>
+      <td>Autorización Final</td>
+      <td>Roberto Silva — Gerente General</td>
+      <td>15/04/2024 10:00</td>
+      <td><span class="badge-sm">Aprobado</span></td>
+    </tr>
+  </table>
+
+  <div class="signatures">
+    <div class="sig-box">
+      <div class="sig-line">
+        <div class="sig-name">Juan C. Pérez G.</div>
+        <div class="sig-role">Solicitante</div>
+        <div class="sig-role">Jefe de Abastecimiento</div>
+      </div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-line">
+        <div class="sig-name">María López V.</div>
+        <div class="sig-role">Revisora</div>
+        <div class="sig-role">Jefa de Finanzas</div>
+      </div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-line">
+        <div class="sig-name">Roberto Silva M.</div>
+        <div class="sig-role">Autorizador</div>
+        <div class="sig-role">Gerente General</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    ACME Corp. SpA — RUT 76.123.456-7 — Documento N° AUT-2024-00847 — Generado electrónicamente el 15/04/2024<br>
+    Este documento tiene validez legal según Ley N° 19.799 sobre documentos electrónicos.
+  </div>
+
+</body>
+</html>

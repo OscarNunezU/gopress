@@ -105,7 +105,7 @@ func (p *Process) waitReady(ctx context.Context) error {
 			}
 			resp, err := http.DefaultClient.Do(req)
 			if err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				p.logger.Debug("chromium ready", "port", p.port)
 				return nil
 			}

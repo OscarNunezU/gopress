@@ -22,13 +22,18 @@ linters:
       check-type-assertions: true
   exclusions:
     rules:
-      # Test files: allow unhandled errors in helpers, defer cancel(), etc.
+      # Test files: allow unhandled errors and httptest.NewRequest without context.
+      # httptest.NewRequest is the canonical test-request builder; flagging it adds
+      # noise without safety benefit.
       - path: "_test\\.go"
-        linters: [errcheck]
+        linters: [errcheck, noctx]
       # cmd/server/main.go uses http.Get without context in --healthcheck mode;
       # the call is annotated //nolint:noctx at the source as well.
       - path: "cmd/server/main\\.go"
         linters: [noctx]
+      # bench/ is load-testing scaffolding, not production code.
+      - path: "bench/"
+        linters: [errcheck, noctx]
 
 issues:
   # Don't limit the number of reported issues.

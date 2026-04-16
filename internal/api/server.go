@@ -62,7 +62,7 @@ func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 
 // Start begins listening and serving requests.
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.http.Addr)
+	ln, err := net.Listen("tcp", s.http.Addr) //nolint:noctx
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.http.Addr, err)
 	}

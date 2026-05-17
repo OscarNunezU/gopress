@@ -26,6 +26,9 @@ type jsonRequest struct {
 	Options *browser.PDFOptions `json:"options,omitempty"`
 }
 
+// convertFn is the signature shared by Convert and ConvertPDFA.
+type convertFn func(ctx context.Context, html string, assets map[string][]byte, opts browser.PDFOptions) ([]byte, error)
+
 // convertHandler handles POST /pdf.
 //
 // Accepts two content types:
@@ -36,6 +39,16 @@ type jsonRequest struct {
 //  2. multipart/form-data — HTML with assets (CSS, images, fonts):
 //     index.html (required), any asset files, options.json (optional)
 func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
+	return makeConvertHandler(conv.Convert, logger)
+}
+
+// convertPDFAHandler handles POST /pdf-a, returning PDF/A-2b output.
+func convertPDFAHandler(conv converterIface, logger *slog.Logger) http.Handler {
+	return makeConvertHandler(conv.ConvertPDFA, logger)
+}
+
+// makeConvertHandler builds an HTTP handler that parses the request and calls fn.
+func makeConvertHandler(fn convertFn, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 
@@ -69,7 +82,7 @@ func convertHandler(conv converterIface, logger *slog.Logger) http.Handler {
 			return
 		}
 
-		pdf, err := conv.Convert(r.Context(), html, assets, opts)
+		pdf, err := fn(r.Context(), html, assets, opts)
 		if err != nil {
 			switch {
 			case errors.Is(err, browser.ErrQueueFull):

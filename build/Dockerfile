@@ -72,6 +72,7 @@ deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%
     && apt-get update -qq \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
         tini \
+        ghostscript \
         # Core fonts for reliable rendering.
         fonts-liberation \
         fonts-noto-cjk \

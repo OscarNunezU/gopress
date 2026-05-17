@@ -24,6 +24,10 @@ func (m *mockConverter) Convert(_ context.Context, _ string, _ map[string][]byte
 	return m.pdfData, m.err
 }
 
+func (m *mockConverter) ConvertPDFA(_ context.Context, _ string, _ map[string][]byte, _ browser.PDFOptions) ([]byte, error) {
+	return m.pdfData, m.err
+}
+
 // buildMultipart creates a multipart/form-data body from a map of filename → content.
 func buildMultipart(t *testing.T, files map[string][]byte) (*bytes.Buffer, string) {
 	t.Helper()

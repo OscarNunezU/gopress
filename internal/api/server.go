@@ -37,6 +37,7 @@ type Config struct {
 // converterIface allows injecting the converter without a circular import.
 type converterIface interface {
 	Convert(ctx context.Context, html string, assets map[string][]byte, opts browser.PDFOptions) ([]byte, error)
+	ConvertPDFA(ctx context.Context, html string, assets map[string][]byte, opts browser.PDFOptions) ([]byte, error)
 }
 
 // New creates a configured Server with all routes registered.
@@ -44,8 +45,11 @@ func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 
 	s := &Server{logger: logger}
-	convertH := requestIDMiddleware(rateLimitMiddleware(cfg.RateLimit, cfg.RateBurst, apiKeyMiddleware(cfg.APIKey, convertHandler(converter, logger))))
-	mux.Handle("POST /pdf", convertH)
+	wrap := func(h http.Handler) http.Handler {
+		return requestIDMiddleware(rateLimitMiddleware(cfg.RateLimit, cfg.RateBurst, apiKeyMiddleware(cfg.APIKey, h)))
+	}
+	mux.Handle("POST /pdf", wrap(convertHandler(converter, logger)))
+	mux.Handle("POST /pdf-a", wrap(convertPDFAHandler(converter, logger)))
 	mux.Handle("GET /health", healthHandler())
 	mux.Handle("GET /version", versionHandler())
 	mux.Handle("GET /metrics", telemetry.Handler())

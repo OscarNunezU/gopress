@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "gopress API",
-    "description": "Complete collection for gopress — HTML → PDF/PDF-A service.\n\n**Required variables:**\n- `base_url` → `http://localhost:3000` (adjust if using a different port)\n- `examples_dir` → absolute path to the `postman/examples` folder in this repo\n\n**Available endpoints:**\n- `GET /health` — service health check\n- `GET /version` — binary version\n- `GET /metrics` — Prometheus metrics\n- `POST /pdf` — convert HTML to standard PDF (JSON or multipart)\n- `POST /pdf-a` — convert HTML to PDF/A-2b archival format (JSON or multipart)",
+    "description": "Complete collection for gopress — HTML → PDF/PDF-A service.\n\n**Required variables:**\n- `base_url` → `http://localhost:3000` (adjust if using a different port)\n- `examples_dir` → absolute path to the `postman/examples` folder in this repo\n\n**Available endpoints:**\n- `GET /health` — service health check\n- `GET /version` — binary version\n- `GET /metrics` — Prometheus metrics\n- `POST /pdf` — convert HTML to PDF; `format` field selects output type:\n  - `\"pdf\"` (default) → standard PDF\n  - `\"pdf-a\"` → PDF/A-2b archival format",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -50,7 +50,7 @@
     },
     {
       "name": "POST /pdf — JSON",
-      "description": "Convert HTML to PDF using `application/json`.\nBest for self-contained HTML (no external assets).\n\nSchema:\n```json\n{\n  \"html\": \"<h1>...</h1>\",\n  \"options\": { ... }   // optional\n}\n```",
+      "description": "Convert HTML to PDF using `application/json`.\nBest for self-contained HTML (no external assets).\n\nSchema:\n```json\n{\n  \"html\": \"<h1>...</h1>\",\n  \"format\": \"pdf\",     // optional: \"pdf\" (default) or \"pdf-a\"\n  \"options\": { ... }   // optional\n}\n```",
       "item": [
         {
           "name": "01 · Simple HTML",
@@ -149,7 +149,23 @@
           }
         },
         {
-          "name": "07 · Custom A4 size",
+          "name": "07 · Resolución oficial (PDF/A-2b)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/pdf",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}h1{color:#2b6cb0;font-size:20px;margin-bottom:8px}.meta{color:#718096;font-size:11px;margin-bottom:32px}p{line-height:1.7;margin-bottom:12px}.firm{margin-top:60px;display:flex;justify-content:flex-end}.firm-box{text-align:center;width:200px}.firm-line{border-top:1px solid #4a5568;padding-top:8px;margin-top:48px}</style></head><body><h1>Resolución N° 001/2024</h1><div class='meta'>Municipalidad de Ejemplo &mdash; 15 de mayo de 2024</div><p><strong>Vistos:</strong> Lo dispuesto en la Ley N° 21.180 sobre Transformación Digital del Estado.</p><p><strong>Resuelvo:</strong> Apruébese el presente documento como resolución oficial en formato PDF/A-2b conforme a ISO 19005-2.</p><div class='firm'><div class='firm-box'><div class='firm-line'>Alcalde<br><span style='font-size:11px;color:#718096'>Municipalidad de Ejemplo</span></div></div></div></body></html>\",\n  \"format\": \"pdf-a\",\n  \"options\": {\n    \"paperWidth\": 8.27,\n    \"paperHeight\": 11.69,\n    \"marginTop\": 1.0,\n    \"marginBottom\": 1.0,\n    \"marginLeft\": 1.18,\n    \"marginRight\": 1.18\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Official document in PDF/A-2b format via `\"format\": \"pdf-a\"`. The service stamps the PDF with XMP conformance metadata and an sRGB output intent — no extra tooling needed."
+          }
+        },
+        {
+          "name": "08 · Custom A4 size",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/pdf",
@@ -162,44 +178,6 @@
               "options": { "raw": { "language": "json" } }
             },
             "description": "Explicit A4 size in inches. Common paper size reference:\n- A4: 8.27 × 11.69\n- Letter: 8.5 × 11\n- Legal: 8.5 × 14\n- A3: 11.69 × 16.54"
-          }
-        }
-      ]
-    },
-    {
-      "name": "POST /pdf-a — PDF/A-2b",
-      "description": "Convert HTML to PDF/A-2b (archival format) using `application/json`.\n\nIdentical request format to `POST /pdf`. The service generates a standard PDF via Chromium and then stamps it with:\n- XMP metadata declaring `pdfaid:part=2` / `pdfaid:conformance=B`\n- sRGB IEC61966-2.1 output intent\n\nUse this endpoint for documents that must comply with archival or legal requirements (e.g. Ley 21.180 in Chile).",
-      "item": [
-        {
-          "name": "01 · Simple document (PDF/A-2b)",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/pdf-a",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}h1{color:#2b6cb0;font-size:20px;margin-bottom:8px}.meta{color:#718096;font-size:11px;margin-bottom:32px}p{line-height:1.7;margin-bottom:12px}.firm{margin-top:60px;display:flex;justify-content:flex-end}.firm-box{text-align:center;width:200px}.firm-line{border-top:1px solid #4a5568;padding-top:8px;margin-top:48px}</style></head><body><h1>Resolución N° 001/2024</h1><div class='meta'>Municipalidad de Ejemplo &mdash; 15 de mayo de 2024</div><p><strong>Vistos:</strong> Lo dispuesto en la Ley N° 21.180 sobre Transformación Digital del Estado y la normativa municipal vigente.</p><p><strong>Considerando:</strong> Que es necesario formalizar los procedimientos de gestión documental en formato digital con validez legal.</p><p><strong>Resuelvo:</strong></p><p>Apruébese el presente documento como resolución oficial de carácter archival, generado en formato PDF/A-2b conforme a la norma ISO 19005-2.</p><div class='firm'><div class='firm-box'><div class='firm-line'>Alcalde<br><span style='font-size:11px;color:#718096'>Municipalidad de Ejemplo</span></div></div></div></body></html>\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "description": "Generates a PDF/A-2b document suitable for official archival. Same request as POST /pdf — the endpoint handles the PDF/A stamping transparently."
-          }
-        },
-        {
-          "name": "02 · Official document with options (PDF/A-2b)",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/pdf-a",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"html\": \"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;padding:48px;color:#1a202c;font-size:13px}h1{color:#2b6cb0}p{line-height:1.7;margin-bottom:12px}</style></head><body><h1>Oficio N° 042-2024</h1><p>En respuesta a su solicitud de fecha 10 de mayo de 2024, se informa que el trámite ha sido aprobado conforme a la normativa vigente.</p><p>Se adjunta la documentación correspondiente para los efectos legales que procedan.</p></body></html>\",\n  \"options\": {\n    \"paperWidth\": 8.27,\n    \"paperHeight\": 11.69,\n    \"marginTop\": 1.0,\n    \"marginBottom\": 1.0,\n    \"marginLeft\": 1.18,\n    \"marginRight\": 1.18\n  }\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "description": "Official document on A4 paper (8.27×11.69 in) with standard margins. Useful for oficio/resolución formats required by Chilean public administration."
           }
         }
       ]

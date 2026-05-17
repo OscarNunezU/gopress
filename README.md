@@ -31,8 +31,9 @@ curl -s -X POST http://localhost:3000/pdf \
 Convert to PDF/A-2b (archival, document management):
 
 ```bash
-curl -s -X POST http://localhost:3000/pdf-a \
+curl -s -X POST http://localhost:3000/pdf \
   -F "index.html=@report.html" \
+  -F "format=pdf-a" \
   -o report.pdfa
 ```
 
@@ -49,40 +50,32 @@ curl -s -X POST http://localhost:3000/pdf \
 
 ## API
 
-Both conversion endpoints accept the same request formats and return `application/pdf` on success.
-
 ### `POST /pdf`
 
-Generates a standard PDF via Chromium's `Page.printToPDF`.
+Single conversion endpoint. Returns `application/pdf` on success.
 
-### `POST /pdf-a`
+Accepts `multipart/form-data` or `application/json`. The `format` field selects the output type:
 
-Generates a PDF/A-2b document. Internally identical to `POST /pdf` but post-processes
-the output with a pure-Go incremental update that adds:
+| Value | Output | Description |
+|-------|--------|-------------|
+| `"pdf"` (default) | Standard PDF | Chromium `Page.printToPDF` |
+| `"pdf-a"` | PDF/A-2b | Same as above, then stamped in pure Go with XMP conformance metadata and sRGB output intent (ISO 19005-2) |
 
-- XMP metadata declaring `pdfaid:part=2` / `pdfaid:conformance=B`
-- An sRGB IEC61966-2.1 output intent (ICC profile embedded in the binary)
-
-No external tools required. Works for text-based documents (tramites, resoluciones, oficios)
-where Chromium already produces conformant content. For documents with complex raster imagery
-in non-RGB color spaces, validate with a PDF/A checker.
-
----
-
-Both endpoints accept `multipart/form-data` or `application/json`.
+No external tools required for PDF/A. Works for text-based documents (tramites, resoluciones, oficios) where Chromium already produces conformant content. For documents with complex raster imagery in non-RGB color spaces, validate with a PDF/A checker.
 
 **`multipart/form-data` fields:**
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `index.html` | yes | HTML document to render |
+| `format` | no | `"pdf"` (default) or `"pdf-a"` |
 | `<any filename>` | no | Asset files (CSS, images, fonts). Referenced from HTML by filename. |
 | `options.json` | no | PDF options (see below) |
 
 **`application/json` body:**
 
 ```json
-{ "html": "<h1>Hello</h1>", "options": { ... } }
+{ "html": "<h1>Hello</h1>", "format": "pdf-a", "options": { ... } }
 ```
 
 **`options.json` / `options` fields** (all optional, Chromium defaults apply when omitted):

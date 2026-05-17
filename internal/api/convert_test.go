@@ -46,6 +46,29 @@ func buildMultipart(t *testing.T, files map[string][]byte) (*bytes.Buffer, strin
 	return &buf, w.FormDataContentType()
 }
 
+// buildMultipartWithFields creates a multipart body with both file and text fields.
+func buildMultipartWithFields(t *testing.T, files map[string][]byte, fields map[string]string) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			t.Fatalf("write field %q: %v", k, err)
+		}
+	}
+	for name, data := range files {
+		fw, err := w.CreateFormFile(name, name)
+		if err != nil {
+			t.Fatalf("create form file %q: %v", name, err)
+		}
+		if _, err := io.Copy(fw, bytes.NewReader(data)); err != nil {
+			t.Fatalf("write form file %q: %v", name, err)
+		}
+	}
+	w.Close()
+	return &buf, w.FormDataContentType()
+}
+
 func TestParseFormMissingHTML(t *testing.T) {
 	body, ct := buildMultipart(t, map[string][]byte{
 		"style.css": []byte("body{}"),
@@ -54,7 +77,7 @@ func TestParseFormMissingHTML(t *testing.T) {
 	r.Header.Set("Content-Type", ct)
 	_ = r.ParseMultipartForm(32 << 20)
 
-	_, _, _, err := parseForm(r)
+	_, _, _, _, err := parseForm(r)
 	if !errors.Is(err, errMissingHTML) {
 		t.Errorf("error = %v, want errMissingHTML", err)
 	}
@@ -69,7 +92,7 @@ func TestParseFormOnlyHTML(t *testing.T) {
 	r.Header.Set("Content-Type", ct)
 	_ = r.ParseMultipartForm(32 << 20)
 
-	html, assets, _, err := parseForm(r)
+	html, assets, format, _, err := parseForm(r)
 	if err != nil {
 		t.Fatalf("parseForm: %v", err)
 	}
@@ -78,6 +101,9 @@ func TestParseFormOnlyHTML(t *testing.T) {
 	}
 	if len(assets) != 0 {
 		t.Errorf("assets len = %d, want 0", len(assets))
+	}
+	if format != "" {
+		t.Errorf("format = %q, want empty (default)", format)
 	}
 }
 
@@ -91,7 +117,7 @@ func TestParseFormWithAssets(t *testing.T) {
 	r.Header.Set("Content-Type", ct)
 	_ = r.ParseMultipartForm(32 << 20)
 
-	_, assets, _, err := parseForm(r)
+	_, assets, _, _, err := parseForm(r)
 	if err != nil {
 		t.Fatalf("parseForm: %v", err)
 	}
@@ -112,7 +138,7 @@ func TestParseFormWithOptions(t *testing.T) {
 	r.Header.Set("Content-Type", ct)
 	_ = r.ParseMultipartForm(32 << 20)
 
-	_, _, opts, err := parseForm(r)
+	_, _, _, opts, err := parseForm(r)
 	if err != nil {
 		t.Fatalf("parseForm: %v", err)
 	}
@@ -124,6 +150,39 @@ func TestParseFormWithOptions(t *testing.T) {
 	}
 	if opts.PaperHeight != 11 {
 		t.Errorf("opts.PaperHeight = %v, want 11", opts.PaperHeight)
+	}
+}
+
+func TestParseFormFormatField(t *testing.T) {
+	body, ct := buildMultipartWithFields(t,
+		map[string][]byte{"index.html": []byte("<html/>")},
+		map[string]string{"format": "pdf-a"},
+	)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", ct)
+	_ = r.ParseMultipartForm(32 << 20)
+
+	_, _, format, _, err := parseForm(r)
+	if err != nil {
+		t.Fatalf("parseForm: %v", err)
+	}
+	if format != formatPDFA {
+		t.Errorf("format = %q, want %q", format, formatPDFA)
+	}
+}
+
+func TestParseFormInvalidFormat(t *testing.T) {
+	body, ct := buildMultipartWithFields(t,
+		map[string][]byte{"index.html": []byte("<html/>")},
+		map[string]string{"format": "docx"},
+	)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", ct)
+	_ = r.ParseMultipartForm(32 << 20)
+
+	_, _, _, _, err := parseForm(r)
+	if err == nil {
+		t.Fatal("expected error for invalid format, got nil")
 	}
 }
 
@@ -145,6 +204,28 @@ func TestConvertHandlerSuccess(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "application/pdf" {
 		t.Errorf("Content-Type = %q, want application/pdf", ct)
+	}
+	if !bytes.Equal(w.Body.Bytes(), fakePDF) {
+		t.Error("response body does not match expected PDF bytes")
+	}
+}
+
+func TestConvertHandlerPDFAFormat(t *testing.T) {
+	fakePDF := []byte("%PDF-1.4 fake-pdfa")
+	conv := &mockConverter{pdfData: fakePDF}
+
+	body, ct := buildMultipartWithFields(t,
+		map[string][]byte{"index.html": []byte("<html/>")},
+		map[string]string{"format": "pdf-a"},
+	)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", ct)
+	w := httptest.NewRecorder()
+
+	convertHandler(conv, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	if !bytes.Equal(w.Body.Bytes(), fakePDF) {
 		t.Error("response body does not match expected PDF bytes")
@@ -228,7 +309,7 @@ func TestParseFormInvalidOptionsJSON(t *testing.T) {
 	r.Header.Set("Content-Type", ct)
 	_ = r.ParseMultipartForm(32 << 20)
 
-	_, _, _, err := parseForm(r)
+	_, _, _, _, err := parseForm(r)
 	if err == nil {
 		t.Fatal("expected error for invalid options.json, got nil")
 	}
@@ -282,15 +363,43 @@ func TestParseJSONValid(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
 	r.Header.Set("Content-Type", "application/json")
 
-	html, opts, err := parseJSON(r)
+	html, format, opts, err := parseJSON(r)
 	if err != nil {
 		t.Fatalf("parseJSON: %v", err)
 	}
 	if html != "<h1>hello</h1>" {
 		t.Errorf("html = %q, want <h1>hello</h1>", html)
 	}
+	if format != "" {
+		t.Errorf("format = %q, want empty (default)", format)
+	}
 	if opts.Landscape {
 		t.Error("expected landscape false")
+	}
+}
+
+func TestParseJSONWithPDFAFormat(t *testing.T) {
+	body := bytes.NewBufferString(`{"html":"<p>test</p>","format":"pdf-a"}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, format, _, err := parseJSON(r)
+	if err != nil {
+		t.Fatalf("parseJSON: %v", err)
+	}
+	if format != formatPDFA {
+		t.Errorf("format = %q, want %q", format, formatPDFA)
+	}
+}
+
+func TestParseJSONInvalidFormat(t *testing.T) {
+	body := bytes.NewBufferString(`{"html":"<p>test</p>","format":"docx"}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, _, _, err := parseJSON(r)
+	if err == nil {
+		t.Fatal("expected error for invalid format, got nil")
 	}
 }
 
@@ -299,7 +408,7 @@ func TestParseJSONWithOptions(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
 	r.Header.Set("Content-Type", "application/json")
 
-	_, opts, err := parseJSON(r)
+	_, _, opts, err := parseJSON(r)
 	if err != nil {
 		t.Fatalf("parseJSON: %v", err)
 	}
@@ -316,7 +425,7 @@ func TestParseJSONMissingHTML(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
 	r.Header.Set("Content-Type", "application/json")
 
-	_, _, err := parseJSON(r)
+	_, _, _, err := parseJSON(r)
 	if !errors.Is(err, errMissingHTML) {
 		t.Errorf("error = %v, want errMissingHTML", err)
 	}
@@ -327,7 +436,7 @@ func TestParseJSONInvalidBody(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
 	r.Header.Set("Content-Type", "application/json")
 
-	_, _, err := parseJSON(r)
+	_, _, _, err := parseJSON(r)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
@@ -349,6 +458,35 @@ func TestConvertHandlerJSONSuccess(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "application/pdf" {
 		t.Errorf("Content-Type = %q, want application/pdf", ct)
+	}
+}
+
+func TestConvertHandlerJSONPDFAFormat(t *testing.T) {
+	fakePDF := []byte("%PDF-1.4 fake-pdfa")
+	conv := &mockConverter{pdfData: fakePDF}
+
+	body := bytes.NewBufferString(`{"html":"<h1>hello</h1>","format":"pdf-a"}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	convertHandler(conv, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestConvertHandlerJSONInvalidFormat(t *testing.T) {
+	body := bytes.NewBufferString(`{"html":"<h1>hi</h1>","format":"docx"}`)
+	r := httptest.NewRequest(http.MethodPost, "/pdf", body)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	convertHandler(&mockConverter{}, slog.Default()).ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
 
@@ -375,5 +513,20 @@ func TestConvertHandlerJSONInvalid(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestValidateFormat(t *testing.T) {
+	valid := []string{"", "pdf", "pdf-a"}
+	for _, f := range valid {
+		if err := validateFormat(f); err != nil {
+			t.Errorf("validateFormat(%q) = %v, want nil", f, err)
+		}
+	}
+	invalid := []string{"docx", "png", "PDF", "PDF-A", "pdfa"}
+	for _, f := range invalid {
+		if err := validateFormat(f); err == nil {
+			t.Errorf("validateFormat(%q) = nil, want error", f)
+		}
 	}
 }

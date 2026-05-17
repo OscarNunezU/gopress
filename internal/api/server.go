@@ -45,11 +45,8 @@ func New(cfg Config, converter converterIface, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 
 	s := &Server{logger: logger}
-	wrap := func(h http.Handler) http.Handler {
-		return requestIDMiddleware(rateLimitMiddleware(cfg.RateLimit, cfg.RateBurst, apiKeyMiddleware(cfg.APIKey, h)))
-	}
-	mux.Handle("POST /pdf", wrap(convertHandler(converter, logger)))
-	mux.Handle("POST /pdf-a", wrap(convertPDFAHandler(converter, logger)))
+	convertH := requestIDMiddleware(rateLimitMiddleware(cfg.RateLimit, cfg.RateBurst, apiKeyMiddleware(cfg.APIKey, convertHandler(converter, logger))))
+	mux.Handle("POST /pdf", convertH)
 	mux.Handle("GET /health", healthHandler())
 	mux.Handle("GET /version", versionHandler())
 	mux.Handle("GET /metrics", telemetry.Handler())

@@ -37,6 +37,7 @@ type Config struct {
 // converterIface allows injecting the converter without a circular import.
 type converterIface interface {
 	Convert(ctx context.Context, html string, assets map[string][]byte, opts browser.PDFOptions) ([]byte, error)
+	ConvertPDFA(ctx context.Context, html string, assets map[string][]byte, opts browser.PDFOptions) ([]byte, error)
 }
 
 // New creates a configured Server with all routes registered.

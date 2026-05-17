@@ -6,11 +6,12 @@ gopress does one thing: convert HTML to PDF using the Chrome DevTools Protocol. 
 
 ## Features
 
-- **Single endpoint** — `POST /pdf` with multipart form data
+- **Two endpoints** — `POST /pdf` (standard PDF) and `POST /pdf-a` (PDF/A-2b)
+- **PDF/A-2b in pure Go** — XMP metadata + sRGB output intent stamped via incremental update; no Ghostscript dependency
 - **Asset support** — serve CSS, images, and fonts alongside your HTML
 - **Browser pool** — N Chromium instances with automatic restart after M conversions
 - **Observability** — Prometheus metrics and OpenTelemetry tracing out of the box
-- **Air-gapped Docker** — pinned Chrome for Testing binary ships in the image, no runtime downloads
+- **Multi-arch Docker** — `linux/amd64` ships Chrome for Testing (pinned, SHA256-verified); `linux/arm64` ships system Chromium for Apple Silicon development
 - **Non-root** — runs as an unprivileged user inside the container
 
 ## Quick start
@@ -19,12 +20,21 @@ gopress does one thing: convert HTML to PDF using the Chrome DevTools Protocol. 
 docker run --rm -p 3000:3000 ghcr.io/oscarnunezu/gopress:latest
 ```
 
-Convert an HTML file:
+Convert an HTML file to standard PDF:
 
 ```bash
 curl -s -X POST http://localhost:3000/pdf \
   -F "index.html=@report.html" \
   -o report.pdf
+```
+
+Convert to PDF/A-2b (archival, document management):
+
+```bash
+curl -s -X POST http://localhost:3000/pdf \
+  -F "index.html=@report.html" \
+  -F "format=pdf-a" \
+  -o report.pdfa
 ```
 
 With assets and PDF options:
@@ -42,15 +52,33 @@ curl -s -X POST http://localhost:3000/pdf \
 
 ### `POST /pdf`
 
-Accepts `multipart/form-data`. Returns `application/pdf` on success.
+Single conversion endpoint. Returns `application/pdf` on success.
+
+Accepts `multipart/form-data` or `application/json`. The `format` field selects the output type:
+
+| Value | Output | Description |
+|-------|--------|-------------|
+| `"pdf"` (default) | Standard PDF | Chromium `Page.printToPDF` |
+| `"pdf-a"` | PDF/A-2b | Same as above, then stamped in pure Go with XMP conformance metadata and sRGB output intent (ISO 19005-2) |
+
+No external tools required for PDF/A. Works for text-based documents (tramites, resoluciones, oficios) where Chromium already produces conformant content. For documents with complex raster imagery in non-RGB color spaces, validate with a PDF/A checker.
+
+**`multipart/form-data` fields:**
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `index.html` | yes | HTML document to render |
+| `format` | no | `"pdf"` (default) or `"pdf-a"` |
 | `<any filename>` | no | Asset files (CSS, images, fonts). Referenced from HTML by filename. |
 | `options.json` | no | PDF options (see below) |
 
-**`options.json` fields** (all optional, Chromium defaults apply when omitted):
+**`application/json` body:**
+
+```json
+{ "html": "<h1>Hello</h1>", "format": "pdf-a", "options": { ... } }
+```
+
+**`options.json` / `options` fields** (all optional, Chromium defaults apply when omitted):
 
 ```json
 {
@@ -83,11 +111,12 @@ Prometheus metrics endpoint.
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `gopress_conversions_total` | counter | Total conversions, labelled `status={ok,error}` |
-| `gopress_conversion_duration_seconds` | histogram | End-to-end conversion latency |
+| `gopress_conversions_total{status}` | counter | Total conversions. `status`: `ok`, `queue_full`, `timeout`, `chrome_error`, `pdfa_error` |
+| `gopress_conversion_duration_seconds{status}` | histogram | End-to-end conversion latency |
+| `gopress_conversion_size_bytes` | histogram | Size of generated PDF/PDF-A in bytes |
 | `gopress_pool_queue_size` | gauge | Jobs waiting in the queue |
 | `gopress_pool_free_instances` | gauge | Idle browser instances |
-| `gopress_pool_restarts_total` | counter | Instance restarts, labelled `reason={max_conversions,crash}` |
+| `gopress_pool_restarts_total{reason}` | counter | Instance restarts. `reason`: `max_conversions`, `crash` |
 | `gopress_rate_limited_total` | counter | Requests rejected with HTTP 429 |
 
 ## Configuration
@@ -98,11 +127,11 @@ All configuration is via environment variables.
 |----------|---------|-------------|
 | `GOPRESS_PORT` | `3000` | HTTP listen port |
 | `GOPRESS_POOL_SIZE` | `4` | Number of Chromium instances |
-| `GOPRESS_MAX_CONVERSIONS` | `500` | Conversions per instance before restart. 0 disables restarts. Tune down for very large documents; tune up (or disable) for small ones. |
+| `GOPRESS_MAX_CONVERSIONS` | `500` | Conversions per instance before restart. 0 disables restarts. |
 | `GOPRESS_QUEUE_DEPTH` | `0 (auto)` | Pending-job buffer size. 0 = `GOPRESS_POOL_SIZE × 4` |
 | `CHROME_BIN_PATH` | `/usr/bin/chrome` | Path to the Chrome/Chromium binary |
-| `GOPRESS_API_KEY` | _(empty)_ | Bearer token for `POST /pdf`. Leave empty to disable auth. Minimum 16 characters when set. |
-| `GOPRESS_RATE_LIMIT` | `0` | Maximum steady-state requests/second for `POST /pdf`. 0 disables rate limiting. |
+| `GOPRESS_API_KEY` | _(empty)_ | Bearer token for `POST /pdf` and `POST /pdf-a`. Leave empty to disable auth. Minimum 16 characters when set. |
+| `GOPRESS_RATE_LIMIT` | `0` | Maximum steady-state requests/second per conversion endpoint. 0 disables rate limiting. |
 | `GOPRESS_RATE_BURST` | `0` | Token-bucket burst size. 0 defaults to 1 when `GOPRESS_RATE_LIMIT > 0`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | _(empty)_ | OTLP gRPC endpoint. Tracing is disabled when empty. |
 
@@ -128,29 +157,38 @@ CHROME_BIN_PATH=/usr/bin/google-chrome make run
 
 ## Docker
 
+The image is multi-arch (`linux/amd64`, `linux/arm64`):
+
+| Arch | Chrome source |
+|------|--------------|
+| `linux/amd64` | Chrome for Testing — pinned version, SHA256-verified |
+| `linux/arm64` | System Chromium from Debian snapshot — for Apple Silicon development |
+
 ```bash
-# Build the Chrome base image (once, or when updating Chrome)
-make docker-base
+# Pull and run (Docker picks the right arch automatically)
+docker run --rm -p 3000:3000 ghcr.io/oscarnunezu/gopress:latest
 
-# Push base image to GHCR
-make docker-push-base
+# Build multi-arch image locally (requires docker buildx)
+make docker-build VERSION=1.0.0
 
-# Build the gopress image
-make docker-build VERSION=0.1.0
+# Build for the current machine arch only (faster for local dev)
+make docker-build VERSION=1.0.0 PLATFORMS=linux/arm64
 
 # Push
-make docker-push VERSION=0.1.0
+make docker-push VERSION=1.0.0
 
 # Run
-make docker-run VERSION=0.1.0
+make docker-run VERSION=1.0.0
 ```
 
-To update the pinned Chrome version:
+To update the pinned Chrome version (amd64):
 
 ```bash
-make docker-base CHROME_VERSION=147.0.7727.56
-make docker-push-base CHROME_VERSION=147.0.7727.56
-make docker-build VERSION=0.2.0 CHROME_VERSION=147.0.7727.56
+# 1. Get the SHA256 for the new version
+make chrome-checksum CHROME_VERSION=148.0.x.y
+
+# 2. Rebuild with the new version + hash
+make docker-build VERSION=1.1.0 CHROME_VERSION=148.0.x.y CHROME_SHA256=<hash>
 ```
 
 Latest stable Chrome for Testing versions: https://googlechromelabs.github.io/chrome-for-testing/
@@ -179,7 +217,15 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317 ./gopress
 Span hierarchy per conversion:
 
 ```
+# POST /pdf
 conversion
+  browser.convert
+    browser.dial_cdp
+    browser.load_html
+    browser.print_pdf
+
+# POST /pdf-a
+conversion.pdfa
   browser.convert
     browser.dial_cdp
     browser.load_html

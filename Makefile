@@ -11,6 +11,8 @@ VERSION        ?= dev
 GO_VERSION     ?= 1.26.2
 CHROME_VERSION ?= 147.0.7727.56
 CHROME_SHA256  ?= 6019890a909bb6359ea40c2f0f82d40c25dae52aa6fcb9c7706739b8dcd6b28e
+# Multi-arch target platforms. Override with PLATFORMS=linux/amd64 for a faster local build.
+PLATFORMS      ?= linux/amd64,linux/arm64
 DEBIAN_SNAPSHOT ?= 20260414T000000Z
 DOCKER_REPO    = ghcr.io/oscarnunezu/gopress
 DOCKERFILE     = build/Dockerfile
@@ -39,7 +41,7 @@ coverage: ## Run tests and open HTML coverage report
 	go tool cover -html=coverage.out -o coverage.html
 
 .PHONY: chrome-checksum
-chrome-checksum: ## Download Chrome for Testing and print its SHA256 (set CHROME_SHA256 in docker-base)
+chrome-checksum: ## Compute SHA256 for Chrome for Testing linux64 (amd64 only — no arm64 build exists)
 	@echo "Downloading Chrome $(CHROME_VERSION) linux64 to compute SHA256..."
 	@curl -fsSL \
 		"https://storage.googleapis.com/chrome-for-testing-public/$(CHROME_VERSION)/linux64/chrome-linux64.zip" \
@@ -61,8 +63,9 @@ docker-push-base: ## Push the Chrome base image to GHCR
 	docker push $(BASE_IMAGE)
 
 .PHONY: docker-build
-docker-build: ## Build the gopress Docker image
-	docker build \
+docker-build: ## Build the gopress Docker image (multi-arch; set PLATFORMS=linux/amd64 to build amd64 only)
+	docker buildx build \
+		--platform $(PLATFORMS) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg CHROME_VERSION=$(CHROME_VERSION) \
 		--build-arg CHROME_SHA256=$(CHROME_SHA256) \

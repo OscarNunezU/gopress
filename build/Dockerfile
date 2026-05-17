@@ -1,18 +1,19 @@
-# Pinned Chrome for Testing version and SHA256.
+# Pinned Chrome for Testing version and SHA256 (linux/amd64 only).
 # Run `make chrome-checksum` to obtain the hash when upgrading.
+# linux/arm64 uses system Chromium from the Debian snapshot instead.
 ARG CHROME_VERSION=147.0.7727.56
 ARG CHROME_SHA256=6019890a909bb6359ea40c2f0f82d40c25dae52aa6fcb9c7706739b8dcd6b28e
-ARG GOLANG_VERSION=1.26.2
 
 # Pin APT to a reproducible snapshot so package versions are fixed across builds.
 # Update DEBIAN_SNAPSHOT intentionally when you want security patches.
 ARG DEBIAN_SNAPSHOT=20260414T000000Z
 
-# ── Go build stage ────────────────────────────────────────────────────────────
+# ── Go build stage ─────────────────────────────────────────────────────────────
+# Build on the host platform for speed; cross-compile via GOOS/GOARCH.
 # Pin to an immutable digest — tag alone is mutable.
-FROM golang:1.26.2@sha256:fcdb3e42c5544e9682a635771eac76a698b66de79b1b50ec5b9ce5c5f14ad775 AS build-stage
+FROM --platform=$BUILDPLATFORM golang:1.26.2@sha256:fcdb3e42c5544e9682a635771eac76a698b66de79b1b50ec5b9ce5c5f14ad775 AS build-stage
 
-ARG VERSION=dev
+ARG VERSION=dev TARGETOS TARGETARCH
 ENV CGO_ENABLED=0
 
 WORKDIR /app
@@ -23,19 +24,17 @@ RUN go mod download && go mod verify
 COPY cmd ./cmd
 COPY internal ./internal
 
-RUN go build \
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w -X github.com/OscarNunezU/gopress/internal/api.version=${VERSION}" \
     -o gopress \
     ./cmd/server
 
-# ── Chrome download stage ─────────────────────────────────────────────────────
-# Downloads and verifies Chrome for Testing from Google Storage.
-# Runs in a throw-away layer; only /opt/chrome is copied to the final image.
-FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a AS chrome-stage
+# ── Chrome stage (amd64) ───────────────────────────────────────────────────────
+# Downloads and SHA256-verifies Chrome for Testing (linux64).
+# Only used when building for linux/amd64; arm64 skips this entirely.
+FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a AS chrome-amd64
 
-ARG CHROME_VERSION
-ARG CHROME_SHA256
-ARG DEBIAN_SNAPSHOT
+ARG CHROME_VERSION CHROME_SHA256 DEBIAN_SNAPSHOT
 
 RUN printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/%s/ trixie main\n\
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%s/ trixie-security main\n' \
@@ -57,6 +56,14 @@ RUN curl -fsSL \
     && rm /tmp/chrome.zip \
     && test -x /opt/chrome/chrome
 
+# ── Chrome stage (arm64 — empty placeholder) ───────────────────────────────────
+# Chrome for Testing does not publish linux-arm64 binaries.
+# The final stage installs system Chromium from the Debian snapshot instead.
+FROM scratch AS chrome-arm64
+
+# ── Select the right Chrome stage based on target arch ────────────────────────
+FROM chrome-${TARGETARCH} AS chrome-stage
+
 # ── Final stage ───────────────────────────────────────────────────────────────
 # Pin to an immutable digest — tag alone is mutable.
 FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a
@@ -64,8 +71,10 @@ FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd8
 ARG GOPRESS_USER_UID=1001
 ARG GOPRESS_USER_GID=1001
 ARG DEBIAN_SNAPSHOT
+ARG TARGETARCH
 
 # Chrome runtime dependencies + fonts.
+# arm64: also installs system chromium (Chrome for Testing has no arm64 build).
 RUN printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/%s/ trixie main\n\
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%s/ trixie-security main\n' \
         "${DEBIAN_SNAPSHOT}" "${DEBIAN_SNAPSHOT}" > /etc/apt/sources.list \
@@ -77,7 +86,7 @@ deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%
         fonts-noto-cjk \
         fonts-noto-color-emoji \
         fonts-noto-core \
-        # Chrome runtime libs (from /opt/chrome/deb.deps — verified via ldd).
+        # Chrome/Chromium runtime libs.
         libasound2t64 \
         libatk1.0-0 \
         libatk-bridge2.0-0 \
@@ -92,6 +101,8 @@ deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/%
         libxdamage1 \
         libxfixes3 \
         libxrandr2 \
+        # arm64: system Chromium from the Debian snapshot.
+        $([ "${TARGETARCH}" = "arm64" ] && echo chromium) \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Non-root user.
@@ -101,9 +112,16 @@ RUN groupadd --gid ${GOPRESS_USER_GID} gopress \
     && mkdir /home/gopress \
     && chown gopress: /home/gopress
 
-# Copy Chrome binary from the download stage.
-COPY --from=chrome-stage /opt/chrome /opt/chrome
-RUN ln -s /opt/chrome/chrome /usr/bin/chrome
+# amd64: copy Chrome for Testing binary from the download stage.
+# arm64: chrome-stage is empty (scratch); COPY is a no-op.
+COPY --from=chrome-stage / /opt/chrome/
+
+# Unified symlink: /usr/bin/chrome → the right binary for each arch.
+RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+        ln -s /opt/chrome/chrome /usr/bin/chrome; \
+    else \
+        ln -s /usr/bin/chromium /usr/bin/chrome; \
+    fi
 
 # Copy gopress binary.
 COPY --from=build-stage /app/gopress /usr/bin/gopress

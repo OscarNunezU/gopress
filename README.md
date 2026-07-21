@@ -6,7 +6,7 @@ gopress does one thing: convert HTML to PDF using the Chrome DevTools Protocol. 
 
 ## Features
 
-- **Two endpoints** — `POST /pdf` (standard PDF) and `POST /pdf-a` (PDF/A-2b)
+- **Single endpoint** — `POST /pdf` with a `format` field selecting `pdf` (default) or `pdf-a` (PDF/A-2b)
 - **PDF/A-2b in pure Go** — XMP metadata + sRGB output intent stamped via incremental update; no Ghostscript dependency
 - **Asset support** — serve CSS, images, and fonts alongside your HTML
 - **Browser pool** — N Chromium instances with automatic restart after M conversions
@@ -130,7 +130,7 @@ All configuration is via environment variables.
 | `GOPRESS_MAX_CONVERSIONS` | `500` | Conversions per instance before restart. 0 disables restarts. |
 | `GOPRESS_QUEUE_DEPTH` | `0 (auto)` | Pending-job buffer size. 0 = `GOPRESS_POOL_SIZE × 4` |
 | `CHROME_BIN_PATH` | `/usr/bin/chrome` | Path to the Chrome/Chromium binary |
-| `GOPRESS_API_KEY` | _(empty)_ | Bearer token for `POST /pdf` and `POST /pdf-a`. Leave empty to disable auth. Minimum 16 characters when set. |
+| `GOPRESS_API_KEY` | _(empty)_ | Bearer token for `POST /pdf`. Leave empty to disable auth. Minimum 16 characters when set. |
 | `GOPRESS_RATE_LIMIT` | `0` | Maximum steady-state requests/second per conversion endpoint. 0 disables rate limiting. |
 | `GOPRESS_RATE_BURST` | `0` | Token-bucket burst size. 0 defaults to 1 when `GOPRESS_RATE_LIMIT > 0`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | _(empty)_ | OTLP gRPC endpoint. Tracing is disabled when empty. |
@@ -224,7 +224,7 @@ conversion
     browser.load_html
     browser.print_pdf
 
-# POST /pdf-a
+# POST /pdf (format=pdf-a)
 conversion.pdfa
   browser.convert
     browser.dial_cdp

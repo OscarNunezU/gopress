@@ -24,12 +24,12 @@ import (
 // One Client is created per Chrome process and lives for its entire lifetime.
 // Use NewSession to obtain a tab-scoped session for each conversion.
 type Client struct {
-	conn      net.Conn
-	reader    *bufio.Reader // shared between handshake and readLoop — no bytes lost
-	logger    *slog.Logger
-	nextID    atomic.Int64
-	mu        sync.Mutex
-	pending   map[int]chan *Message
+	conn    net.Conn
+	reader  *bufio.Reader // shared between handshake and readLoop — no bytes lost
+	logger  *slog.Logger
+	nextID  atomic.Int64
+	mu      sync.Mutex
+	pending map[int]chan *Message
 	// listeners for browser-level events (sessionId == "").
 	listeners map[string][]chan Event
 	// sessionListeners routes events to the correct tab session.
@@ -270,8 +270,8 @@ func (c *Client) writePongFrame(payload []byte) error {
 	}
 
 	frame := []byte{
-		0x8A,                        // FIN=1, opcode=0xA (pong)
-		byte(len(payload)) | 0x80,   // MASK=1, 7-bit length (≤125)
+		0x8A,                      // FIN=1, opcode=0xA (pong)
+		byte(len(payload)) | 0x80, // MASK=1, 7-bit length (≤125)
 	}
 	frame = append(frame, mask...)
 	frame = append(frame, masked...)

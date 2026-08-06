@@ -267,7 +267,7 @@ func (i *Instance) convertWithAssets(ctx context.Context, session cdp.Sender, jo
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
-	go srv.Serve(ln) //nolint:errcheck
+	go srv.Serve(ln)  //nolint:errcheck
 	defer srv.Close() //nolint:errcheck
 
 	// Subscribe BEFORE navigating — avoids the race condition.
@@ -290,4 +290,3 @@ func waitForEvent(ctx context.Context, ch <-chan cdp.Event) error {
 		return nil
 	}
 }
-

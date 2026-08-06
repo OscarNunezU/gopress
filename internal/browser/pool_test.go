@@ -260,7 +260,7 @@ func TestPoolDrain(t *testing.T) {
 
 	// Start a long-running conversion in the background.
 	go p.Convert(context.Background(), &Job{HTML: "<p>drain</p>"}) //nolint:errcheck
-	<-started                                                       // worker is now busy
+	<-started                                                      // worker is now busy
 
 	// Launch Drain — it must block until the in-flight conversion finishes.
 	drained := make(chan struct{})

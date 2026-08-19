@@ -168,7 +168,7 @@ func TestPoolConvertCanceledBeforeEnqueue(t *testing.T) {
 }
 
 func TestPoolContextCancelWhileWaiting(t *testing.T) {
-	started := make(chan struct{})
+	started := make(chan struct{}, 1)
 	release := make(chan struct{})
 
 	fi := &fakeInstance{

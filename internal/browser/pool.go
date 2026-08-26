@@ -67,6 +67,11 @@ type Pool struct {
 	shutdown    atomic.Bool    // set during Close to stop restart attempts
 	backoffUnit time.Duration  // unit for restart backoff (default: time.Second; tests use time.Millisecond)
 	logger      *slog.Logger
+	// lifeCtx dura lo que dura el pool y es el que gobierna la vida de cada
+	// Chromium. No puede tener deadline: exec.CommandContext mata el proceso al
+	// cancelarse, así que un contexto acotado acá mata al navegador que se acaba
+	// de levantar.
+	lifeCtx     context.Context
 	newInstance func(ctx context.Context, port int) (instance, error)
 }
 
@@ -104,10 +109,11 @@ func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, e
 	}
 
 	p := &Pool{
-		cfg:    cfg,
-		queue:  make(chan *pendingJob, qd),
-		done:   make(chan struct{}),
-		logger: logger,
+		cfg:     cfg,
+		queue:   make(chan *pendingJob, qd),
+		done:    make(chan struct{}),
+		logger:  logger,
+		lifeCtx: ctx,
 	}
 	p.newInstance = func(ctx context.Context, port int) (instance, error) {
 		return NewInstance(ctx, cfg.BinPath, port, cfg.MaxConversions, logger)
@@ -279,8 +285,23 @@ func (p *Pool) restart(s *slot) error {
 		p.logger.Warn("kill old instance during restart", "err", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// El contexto de VIDA del pool, no uno acotado.
+	//
+	// Acá había `context.WithTimeout(context.Background(), 30*time.Second)` con
+	// su `defer cancel()`, y ese cancel mataba al Chromium recién arrancado en
+	// cuanto restart() retornaba —exec.CommandContext lo liga al contexto—. La
+	// consecuencia no era un reinicio lento: era que el pool no volvía NUNCA.
+	// Cada trabajo siguiente fallaba, marcaba la instancia como caída, disparaba
+	// otro reinicio y el nuevo navegador moría igual. Desde el arranque
+	// funcionaba porque NewPool recibe el contexto del proceso servidor.
+	//
+	// Medido en el servidor de dev el 2026-08-26: gopress servía 500 en todas las
+	// peticiones de PDF durante media hora mientras `/health` respondía 200, y
+	// sólo un reinicio del contenedor lo sacaba.
+	ctx := p.lifeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	inst, err := p.newInstance(ctx, p.cfg.BasePort+s.index)
 	if err != nil {

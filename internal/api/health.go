@@ -22,16 +22,14 @@ type healthReporter interface {
 //
 // El motivo va en el cuerpo. Un 503 sin motivo obliga a entrar a leer logs, que
 // es exactamente el trabajo que este endpoint existe para ahorrar.
+//
+// `pool` no admite nil a propósito. Una red del tipo «si no hay pool, responder
+// ok» convierte un cableado mal hecho en un servicio que se declara sano sin
+// mirar nada — que es exactamente la falla que este endpoint existe para
+// corregir. Si falta, tiene que romper al arrancar y no mentir en producción.
 func healthHandler(pool healthReporter) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
-		// Sin pool inyectado —tests que sólo miran el enrutado— se comporta
-		// como antes en vez de romper.
-		if pool == nil {
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-			return
-		}
 
 		if ok, motivo := pool.Health(); !ok {
 			w.WriteHeader(http.StatusServiceUnavailable)

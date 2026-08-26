@@ -77,7 +77,7 @@ func main() {
 		APIKey:       cfg.apiKey,
 		RateLimit:    cfg.rateLimit,
 		RateBurst:    cfg.rateBurst,
-	}, conv, logger)
+	}, conv, pool, logger)
 
 	// Start server in background, block until signal.
 	srvErr := make(chan error, 1)

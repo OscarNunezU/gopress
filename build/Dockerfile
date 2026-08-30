@@ -32,7 +32,7 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 # ── Chrome stage (amd64) ───────────────────────────────────────────────────────
 # Downloads and SHA256-verifies Chrome for Testing (linux64).
 # Only used when building for linux/amd64; arm64 skips this entirely.
-FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a AS chrome-amd64
+FROM debian:13-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a AS chrome-amd64-download
 
 ARG CHROME_VERSION CHROME_SHA256 DEBIAN_SNAPSHOT
 
@@ -55,6 +55,20 @@ RUN curl -fsSL \
     && mv /opt/chrome-linux64 /opt/chrome \
     && rm /tmp/chrome.zip \
     && test -x /opt/chrome/chrome
+
+# Reduce the stage to Chrome alone, and this is not an optimisation.
+#
+# The final stage copies the ROOT of chrome-stage into /opt/chrome/. When this
+# stage was the Debian image itself, that copied an entire root filesystem in:
+# Chrome landed at /opt/chrome/opt/chrome/chrome, one level below where the
+# symlink points, and 469 MB of Debian came along for the ride.
+#
+# The failure only ever showed on amd64. arm64 selects the scratch stage below,
+# where copying the root is genuinely a no-op, so building on an Apple Silicon
+# laptop produced a working image every time and the published amd64 one was
+# broken from the start.
+FROM scratch AS chrome-amd64
+COPY --from=chrome-amd64-download /opt/chrome/ /
 
 # ── Chrome stage (arm64 — empty placeholder) ───────────────────────────────────
 # Chrome for Testing does not publish linux-arm64 binaries.
@@ -121,7 +135,13 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
         ln -s /opt/chrome/chrome /usr/bin/chrome; \
     else \
         ln -s /usr/bin/chromium /usr/bin/chrome; \
-    fi
+    fi \
+    # Comprueba que el symlink apunte a algo ejecutable, y existe porque ya
+    # falló: la imagen se publicó con el enlace roto y el error apareció recién
+    # al arrancar el contenedor, como "fork/exec /usr/bin/chrome: no such file
+    # or directory". `test -x` sigue el enlace, así que un destino inexistente
+    # rompe la construcción, que es donde corresponde enterarse.
+    && test -x /usr/bin/chrome
 
 # Copy gopress binary.
 COPY --from=build-stage /app/gopress /usr/bin/gopress

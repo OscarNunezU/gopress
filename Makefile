@@ -31,6 +31,33 @@ build: ## Build the gopress binary
 run: build ## Build and run locally (set CHROME_BIN_PATH to your local Chrome)
 	CHROME_BIN_PATH=$${CHROME_BIN_PATH:-/usr/bin/google-chrome} ./$(BINARY)
 
+# ── CI local ──────────────────────────────────────────────────────────────────
+#
+# Corre lo mismo que corría el workflow de GitHub, en el mismo orden. Existe
+# porque el 2026-08-26 se agotó el crédito de Actions y la red pasó a ser esto:
+# si un objetivo local es más flojo que el que reemplaza, no es una red, es la
+# sensación de tener una. Pasó en sgdoc-web, cuyo `npm run ci` permitía 98
+# warnings mientras GitHub exigía 60.
+#
+# La versión del linter es la misma que fijaba el CI (GOLANGCI_VERSION), porque
+# versiones distintas reportan conjuntos distintos de problemas.
+.PHONY: ci
+ci: ## Corre localmente lo mismo que corría el CI de GitHub
+	@echo "── gofmt ──"
+	@test -z "$$(gofmt -l . 2>/dev/null | grep -v vendor)" || { gofmt -l . | grep -v vendor; echo "ERROR: hay archivos sin formatear"; exit 1; }
+	@echo "── go mod verify ──"
+	@go mod verify
+	@echo "── go vet ──"
+	@go vet ./...
+	@echo "── build ──"
+	@CGO_ENABLED=0 go build ./...
+	@echo "── tests (race) ──"
+	@go test -race ./internal/... ./cmd/...
+	@echo "── linter ──"
+	@$(MAKE) --no-print-directory lint
+	@echo ""
+	@echo "OK: lo mismo que corría el CI de GitHub, en verde."
+
 .PHONY: test
 test: ## Run unit tests (race detector on Linux/macOS; disabled on Windows — no CGO)
 	go test $(RACE_FLAG) ./...

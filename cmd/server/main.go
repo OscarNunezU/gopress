@@ -77,11 +77,16 @@ func main() {
 		APIKey:       cfg.apiKey,
 		RateLimit:    cfg.rateLimit,
 		RateBurst:    cfg.rateBurst,
-	}, conv, logger)
+	}, conv, pool, logger)
 
 	// Start server in background, block until signal.
 	srvErr := make(chan error, 1)
 	go func() { srvErr <- srv.Start() }()
+
+	// Vigilante de salud: si el pool no se recupera, terminar para que el
+	// supervisor recree el contenedor. Ver watchdog.go.
+	limite := time.Duration(cfg.unhealthyExitAfter) * time.Second
+	go vigilarSalud(ctx, pool, limite, 5*time.Second, logger, os.Exit)
 
 	logger.Info("gopress started", "port", cfg.port, "pool_size", cfg.poolSize)
 	if cfg.apiKey != "" {
@@ -119,16 +124,17 @@ func main() {
 }
 
 type config struct {
-	port           int
-	chromeBin      string
-	poolSize       int
-	maxConversions int
-	queueDepth     int
-	otlpEndpoint   string
-	env            string
-	apiKey         string
-	rateLimit      float64
-	rateBurst      int
+	port               int
+	chromeBin          string
+	poolSize           int
+	maxConversions     int
+	queueDepth         int
+	unhealthyExitAfter int
+	otlpEndpoint       string
+	env                string
+	apiKey             string
+	rateLimit          float64
+	rateBurst          int
 }
 
 func loadConfig() config {
@@ -138,11 +144,17 @@ func loadConfig() config {
 		poolSize:       envInt("GOPRESS_POOL_SIZE", 4),
 		maxConversions: envInt("GOPRESS_MAX_CONVERSIONS", 500),
 		queueDepth:     envInt("GOPRESS_QUEUE_DEPTH", 0),
-		otlpEndpoint:   envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		env:            envStr("GOPRESS_ENV", "development"),
-		apiKey:         envStr("GOPRESS_API_KEY", ""),
-		rateLimit:      envFloat("GOPRESS_RATE_LIMIT", 0),
-		rateBurst:      envInt("GOPRESS_RATE_BURST", 0),
+		// Cuánto puede estar enfermo el pool antes de que el proceso termine y
+		// el supervisor levante el contenedor. 0 desactiva el vigilante.
+		//
+		// 90 s y no menos: un navegador que muere y vuelve deja el pool enfermo
+		// unos segundos, y eso es recuperación normal, no avería.
+		unhealthyExitAfter: envInt("GOPRESS_UNHEALTHY_EXIT_AFTER", 90),
+		otlpEndpoint:       envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		env:                envStr("GOPRESS_ENV", "development"),
+		apiKey:             envStr("GOPRESS_API_KEY", ""),
+		rateLimit:          envFloat("GOPRESS_RATE_LIMIT", 0),
+		rateBurst:          envInt("GOPRESS_RATE_BURST", 0),
 	}
 }
 

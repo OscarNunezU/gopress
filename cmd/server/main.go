@@ -125,6 +125,7 @@ type config struct {
 	maxConversions int
 	queueDepth     int
 	otlpEndpoint   string
+	env            string
 	apiKey         string
 	rateLimit      float64
 	rateBurst      int
@@ -138,6 +139,7 @@ func loadConfig() config {
 		maxConversions: envInt("GOPRESS_MAX_CONVERSIONS", 500),
 		queueDepth:     envInt("GOPRESS_QUEUE_DEPTH", 0),
 		otlpEndpoint:   envStr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		env:            envStr("GOPRESS_ENV", "development"),
 		apiKey:         envStr("GOPRESS_API_KEY", ""),
 		rateLimit:      envFloat("GOPRESS_RATE_LIMIT", 0),
 		rateBurst:      envInt("GOPRESS_RATE_BURST", 0),
@@ -184,6 +186,15 @@ func validateConfig(cfg config) error {
 	}
 	if cfg.apiKey != "" && len(cfg.apiKey) < 16 {
 		return fmt.Errorf("GOPRESS_API_KEY must be at least 16 characters when set, got %d", len(cfg.apiKey))
+	}
+	// Outside development, an empty GOPRESS_API_KEY leaves POST /pdf open to any
+	// caller that can reach the port. gopress renders attacker-editable HTML in a
+	// real Chromium, so without authentication that is an unauthenticated SSRF
+	// pivot. Development may run keyless on purpose — the control there is the
+	// network — but a production deploy that forgets the key must FAIL at startup,
+	// not merely warn.
+	if cfg.env != "development" && cfg.apiKey == "" {
+		return fmt.Errorf("GOPRESS_API_KEY is required when GOPRESS_ENV=%q (empty leaves POST /pdf open to all callers)", cfg.env)
 	}
 	if cfg.rateBurst < 0 {
 		return fmt.Errorf("GOPRESS_RATE_BURST must be >= 0, got %d", cfg.rateBurst)

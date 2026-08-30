@@ -67,7 +67,19 @@ type Pool struct {
 	shutdown    atomic.Bool    // set during Close to stop restart attempts
 	backoffUnit time.Duration  // unit for restart backoff (default: time.Second; tests use time.Millisecond)
 	logger      *slog.Logger
+	// lifeCtx dura lo que dura el pool y es el que gobierna la vida de cada
+	// Chromium. No puede tener deadline: exec.CommandContext mata el proceso al
+	// cancelarse, así que un contexto acotado acá mata al navegador que se acaba
+	// de levantar.
+	lifeCtx     context.Context
 	newInstance func(ctx context.Context, port int) (instance, error)
+	// fallosSeguidos cuenta conversiones que fallaron una tras otra.
+	//
+	// Usa el tráfico real como sonda en vez de convertir algo cada N segundos.
+	// Con POOL_SIZE=1 una sonda sintética se comería el único navegador y
+	// competiría con el trabajo de verdad: el health check sería fuente de la
+	// congestión que debe detectar.
+	fallosSeguidos atomic.Int64
 }
 
 type slot struct {
@@ -104,10 +116,11 @@ func NewPool(ctx context.Context, cfg PoolConfig, logger *slog.Logger) (*Pool, e
 	}
 
 	p := &Pool{
-		cfg:    cfg,
-		queue:  make(chan *pendingJob, qd),
-		done:   make(chan struct{}),
-		logger: logger,
+		cfg:     cfg,
+		queue:   make(chan *pendingJob, qd),
+		done:    make(chan struct{}),
+		logger:  logger,
+		lifeCtx: ctx,
 	}
 	p.newInstance = func(ctx context.Context, port int) (instance, error) {
 		return NewInstance(ctx, cfg.BinPath, port, cfg.MaxConversions, logger)
@@ -206,6 +219,45 @@ func (p *Pool) Close() {
 	})
 }
 
+// maxFallosSeguidos es cuántas conversiones seguidas pueden fallar antes de que
+// el pool se declare enfermo.
+//
+// Tres y no una: una conversión puede fallar por el HTML que le mandaron, y
+// declarar el servicio caído por un documento raro sería peor que no avisar.
+// Tres seguidas ya no son mala suerte.
+const maxFallosSeguidos = 3
+
+// Health dice si el pool puede trabajar, y por qué no cuando no puede.
+//
+// Existe porque /health devolvía `{"status":"ok"}` literal: no miraba nada, así
+// que el 2026-08-26 respondió 200 durante media hora mientras Chromium estaba en
+// bucle de caída y TODAS las conversiones fallaban. Un servicio que se cae y lo
+// declara lo cubre cualquier supervisión; uno que se cae y dice «sano» no lo
+// detecta nadie hasta que alguien avisa que no puede firmar un decreto.
+//
+// Mira dos cosas distintas y hacen falta las dos:
+//
+//   - Que quede alguna instancia usable. Cubre «no hay navegador».
+//   - Que las últimas conversiones no hayan fallado todas. Cubre «hay navegador
+//     pero no sirve», que la primera no ve.
+func (p *Pool) Health() (bool, string) {
+	if n := p.fallosSeguidos.Load(); n >= maxFallosSeguidos {
+		return false, fmt.Sprintf("%d conversiones seguidas fallaron", n)
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, s := range p.slots {
+		if !s.inst.HasCrashed() {
+			return true, ""
+		}
+	}
+	if len(p.slots) == 0 {
+		return false, "el pool no tiene instancias"
+	}
+	return false, "todas las instancias del pool están caídas"
+}
+
 func (p *Pool) worker(s *slot) {
 	// consecutiveFails tracks back-to-back restart failures for this slot.
 	// It resets to 0 on any successful restart and drives the backoff duration.
@@ -224,6 +276,17 @@ func (p *Pool) worker(s *slot) {
 		telemetry.PoolFreeInstances.Dec()
 
 		pdf, err := s.inst.Convert(pj.ctx, pj.job)
+		// La cola llena NO cuenta como fallo: es descarte de carga, y el pool
+		// está sano justamente porque rechaza en vez de acumular. Tampoco
+		// cuenta que el cliente se haya ido. Contar cualquiera de las dos haría
+		// que un día de ráfaga se reporte como avería.
+		switch {
+		case err == nil:
+			p.fallosSeguidos.Store(0)
+		case errors.Is(err, ErrQueueFull) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
+		default:
+			p.fallosSeguidos.Add(1)
+		}
 		pj.result <- jobResult{pdf: pdf, err: err}
 		p.wg.Done()
 
@@ -279,8 +342,23 @@ func (p *Pool) restart(s *slot) error {
 		p.logger.Warn("kill old instance during restart", "err", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// El contexto de VIDA del pool, no uno acotado.
+	//
+	// Acá había `context.WithTimeout(context.Background(), 30*time.Second)` con
+	// su `defer cancel()`, y ese cancel mataba al Chromium recién arrancado en
+	// cuanto restart() retornaba —exec.CommandContext lo liga al contexto—. La
+	// consecuencia no era un reinicio lento: era que el pool no volvía NUNCA.
+	// Cada trabajo siguiente fallaba, marcaba la instancia como caída, disparaba
+	// otro reinicio y el nuevo navegador moría igual. Desde el arranque
+	// funcionaba porque NewPool recibe el contexto del proceso servidor.
+	//
+	// Medido en el servidor de dev el 2026-08-26: gopress servía 500 en todas las
+	// peticiones de PDF durante media hora mientras `/health` respondía 200, y
+	// sólo un reinicio del contenedor lo sacaba.
+	ctx := p.lifeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	inst, err := p.newInstance(ctx, p.cfg.BasePort+s.index)
 	if err != nil {

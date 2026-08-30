@@ -11,7 +11,7 @@ func TestHealthHandler(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
-	healthHandler().ServeHTTP(w, r)
+	healthHandler(poolFalso{sano: true}).ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
